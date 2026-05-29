@@ -5,13 +5,14 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: 'Outfit', 'Inter', system-ui, sans-serif;
-  background-color: #F6E7D2;
+  background-color: #0c0a09;
 }
 
 html, body, #root {
   min-height: 100%;
+  background-color: #0c0a09;
 }
 
 body {

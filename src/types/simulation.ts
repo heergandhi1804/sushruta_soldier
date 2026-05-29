@@ -1,16 +1,8 @@
+export type GameMode = 'menu' | 'play' | 'play-active' | 'sandbox' | 'settings';
+
 export type RealityLayer = 'pratyaksha' | 'shastra' | 'anumana';
 
 export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
-
-export type GurukulLocation = 
-  | 'courtyard' 
-  | 'garden' 
-  | 'hall' 
-  | 'recovery' 
-  | 'riverbank' 
-  | 'chamber' 
-  | 'library' 
-  | 'workshop';
 
 export interface ScrollMetrics {
   observation: number;
@@ -45,6 +37,14 @@ export interface PatientProfile {
   status: 'waiting' | 'treated' | 'critical' | 'recovered';
   visualId: string;
   waitTime: number;
+}
+
+export interface SandboxElement {
+  id: string;
+  type: 'swelling' | 'vein' | 'marma' | 'foreign_body' | 'fracture';
+  x: number; // percentage width
+  y: number; // percentage height
+  size: number;
 }
 
 export interface ToolOption {
@@ -84,4 +84,5 @@ export interface SavePayload {
   consequences: ConsequenceMetrics;
   history: string[];
 }
+
 

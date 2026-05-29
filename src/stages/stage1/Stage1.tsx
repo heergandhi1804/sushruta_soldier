@@ -1,338 +1,386 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useSimulation } from '../../systems/SimulationProvider';
-import { manuscriptFragments } from '../../systems/historical';
 
-interface LeechOption {
-  id: 'left' | 'right';
+interface LeechItem {
+  id: 'medicinal' | 'poisonous';
   name: string;
-  texture: string;
-  movement: string;
   color: string;
-  head: string;
-  category: 'medicinal' | 'poisonous';
-  description: string;
+  glow: string;
+  skin: string;
+  speed: string;
 }
 
-const leeches: LeechOption[] = [
+const leechesList: LeechItem[] = [
   {
-    id: 'left',
+    id: 'medicinal',
     name: 'Jalauka (Medicinal)',
-    texture: 'Smooth skin with fine emerald stripes',
-    movement: 'Steady, rhythmic pulse with smooth undulations',
-    color: 'Mottled olive and warm amber underbelly',
-    head: 'Tapered, fine tip with rounded suction ridge',
-    category: 'medicinal',
-    description: 'Found in clean, slow-flowing forest streams under lotus pads.'
+    color: 'bg-emerald-850 border-emerald-500',
+    glow: 'shadow-emerald-500/20',
+    skin: 'Smooth olive skin, yellow bands',
+    speed: 'Rhythmic, gentle waves'
   },
   {
-    id: 'right',
+    id: 'poisonous',
     name: 'Savisha (Poisonous)',
-    texture: 'Rough, bumpy skin with raised black segments',
-    movement: 'Sharp, jerky twists and hyperactive writhing',
-    color: 'Dark reddish-brown with dusty grey spots',
-    head: 'Broad, flat suction cup with jagged margins',
-    category: 'poisonous',
-    description: 'Found in stagnant mud pools near decaying vegetation.'
+    color: 'bg-red-950 border-red-500',
+    glow: 'shadow-red-500/20',
+    skin: 'Rough grey knobs, black spikes',
+    speed: 'Hyperactive, frantic twists'
   }
 ];
 
-const fragment = manuscriptFragments.find((item) => item.id === 'stage1-observe');
-
 export default function Stage1() {
-  const { realityLayer, updateScroll, updateConsequences, addHistory, setSushrutaDialogue } = useSimulation();
-  const [selectedLeech, setSelectedLeech] = useState<LeechOption | null>(null);
+  const {
+    updateScroll,
+    updateConsequences,
+    addHistory,
+    setUnlockedStages,
+    flashSushrutaAlert,
+    consequenceMetrics
+  } = useSimulation();
+
+  const [selectedLeech, setSelectedLeech] = useState<'medicinal' | 'poisonous' | null>(null);
   const [attached, setAttached] = useState(false);
-  const [timer, setTimer] = useState(0);
-  const [outcome, setOutcome] = useState<string>('Examine the leeches in the clay bowls. Select the one matching the classical teachings before starting therapy.');
-  const [isComplete, setIsComplete] = useState(false);
-  const [patientStatus, setPatientStatus] = useState({
-    breathing: 'Calm, shallow breaths',
-    skinColor: 'Dark purplish-red swelling',
-    pulse: 'Rapid and hard (Pitta-Vata)'
-  });
+  const [timer, setTimer] = useState(0); // in seconds
+  const [swelling, setSwelling] = useState(85); // percentage
+  const [bloodPressure, setBloodPressure] = useState(130);
+  const [breathingRate, setBreathingRate] = useState(2.2); // seconds per breath
+  const [activeStatus, setActiveStatus] = useState('Inspect the leeches and click to select.');
+  const [isFinished, setIsFinished] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [poisonVeins, setPoisonVeins] = useState(false);
 
-  const availableLeeches = useMemo(() => leeches, []);
-
-  // Monitor leech attachment and time
+  // Real-time ticking system (every 100ms)
   useEffect(() => {
-    if (!attached) return;
+    if (isFinished) return;
 
-    // Update patient states dynamically based on attachment time
-    if (timer < 3) {
-      setPatientStatus({
-        breathing: 'Slightly deep, sighing breaths',
-        skinColor: 'Dull red, swelling begins to tighten',
-        pulse: 'Slightly bounding pulse'
-      });
-    } else if (timer >= 3 && timer <= 5) {
-      setPatientStatus({
-        breathing: 'Relieved, relaxed breathing',
-        skinColor: 'Bright healthy red, swelling visibly reduced',
-        pulse: 'Stable and soft pulse'
-      });
-    } else if (timer > 5) {
-      setPatientStatus({
-        breathing: 'Rapid, shallow gasps',
-        skinColor: 'Pale, cold skin surrounding the wound',
-        pulse: 'Weak, thready pulse (Prana fading)'
-      });
-    }
+    const interval = window.setInterval(() => {
+      if (attached) {
+        setTimer((t) => {
+          const nextT = t + 0.1;
+          
+          // Deteriorate if left too long
+          if (nextT >= 6.0) {
+            handleFailure('Leech fed past the impure blood, draining vital life-essence!');
+            return 6.0;
+          }
+          return nextT;
+        });
 
-    if (timer >= 6) {
-      setOutcome('The leech was left attached for too long. It began draining the guard\'s vital blood (Ojas).');
-      setIsComplete(true);
-      updateConsequences({ bloodLoss: 20, pain: 12, inflammation: 5, trust: -10, permanentDamage: 5 });
-      addHistory('Stage 1: Missed the removal window, resulting in severe patient blood loss.');
-      setSushrutaDialogue({
-        speaker: 'Acharya Sushruta',
-        text: 'Alas, you failed to observe the patient! The leech drew beyond the stagnant blood, weakening the guard\'s life force. This is a severe lesson.',
-        expression: 'concerned'
-      });
-    }
-  }, [attached, timer, updateConsequences, addHistory, setSushrutaDialogue]);
+        // Leech sucks swelling
+        setSwelling((s) => Math.max(10, s - 1.2));
+        
+        // Pressure drops as blood is extracted
+        setBloodPressure((bp) => Math.max(70, bp - 1.1));
 
-  useEffect(() => {
-    let interval: number | undefined;
-    if (attached && timer < 6 && !isComplete) {
-      interval = window.setInterval(() => setTimer((current) => current + 1), 1000);
-    }
-    return () => {
-      if (interval) window.clearInterval(interval);
-    };
-  }, [attached, timer, isComplete]);
+        if (selectedLeech === 'poisonous') {
+          // Poison causes instant distress
+          setPoisonVeins(true);
+          setBreathingRate(0.6); // gasping
+          updateConsequences({ pain: 3, inflammation: 2, infection: 4 });
+        } else {
+          // Medicinal relieves pain and breathing stabilizes
+          setBreathingRate((rate) => Math.max(1.0, rate - 0.05));
+          updateConsequences({ pain: -1.5, bloodLoss: 1 });
+        }
+      } else {
+        // Swelling slowly accumulates if untreated
+        setSwelling((s) => Math.min(100, s + 0.15));
+      }
+    }, 100);
 
-  const activeFragment = fragment ? fragment[realityLayer] : '';
+    return () => window.clearInterval(interval);
+  }, [attached, selectedLeech, isFinished]);
 
-  function handleLeechSelection(option: LeechOption) {
-    if (attached) return;
-    setSelectedLeech(option);
-
-    if (option.category === 'medicinal') {
-      setOutcome('You have chosen the Jalauka. Place it on the guard\'s swollen leg near the stagnant blood vessel.');
-      setSushrutaDialogue({
-        speaker: 'Acharya Sushruta',
-        text: 'Indeed. The olive skin and steady pulse denote the medicinal leech. It will suck only the impure humors. Proceed with the application.',
-        expression: 'calm'
-      });
-    } else {
-      setOutcome('Warning: This leech displays poisonous traits. Applying it will cause toxic fever.');
-      setSushrutaDialogue({
-        speaker: 'Acharya Sushruta',
-        text: 'Halt, disciple! Notice the rough black segments and hyperactive twists. That is a poisonous Savisha leech. Look at the scriptures before you harm a guard of Kashi.',
-        expression: 'concerned'
-      });
-    }
-
-    updateScroll({ observation: 4 });
-  }
-
-  function handleAttach() {
-    if (!selectedLeech || attached) return;
+  const handleAttach = () => {
+    if (!selectedLeech || attached || isFinished) return;
     setAttached(true);
     setTimer(0);
-    setOutcome('The leech is attached and begins to pulse. Monitor the swelling height and the guard\'s breathing closely.');
-    addHistory('Stage 1: Leech attached, starting therapy timer.');
-    setSushrutaDialogue({
-      speaker: 'Acharya Sushruta',
-      text: 'It is drawing. Watch the movement of its neck and the color of the skin. Be ready to apply honey or turmeric to release it at the exact moment.',
-      expression: 'thoughtful'
-    });
-  }
+    setActiveStatus('Leech applied. Watch the swelling level and blood pulse speed.');
+    flashSushrutaAlert('Leech attached. Monitor the color change and swelling reduction.');
+  };
 
-  function handleRemove() {
-    if (!attached || isComplete) return;
-    const correctWindow = timer >= 4 && timer <= 5;
-    const wasWrongLeech = selectedLeech?.category === 'poisonous';
-    let summary = '';
+  const handleRemove = () => {
+    if (!attached || isFinished) return;
+    setAttached(false);
+    setIsFinished(true);
 
-    if (wasWrongLeech) {
-      summary = 'The poisonous Savisha leech injected toxic humors. The guard developed a burning fever and heavy localized inflammation.';
-      updateConsequences({ pain: 20, inflammation: 15, infection: 18, trust: -15 });
-      updateScroll({ ethics: -6, precision: -2 });
-      addHistory('Stage 1: Used a poisonous leech, causing fever.');
-      setSushrutaDialogue({
-        speaker: 'Acharya Sushruta',
-        text: 'A dangerous mistake! You ignored the visual warnings of the Savisha leech. Apply a cooling paste of sandalwood immediately to save his leg.',
-        expression: 'concerned'
-      });
-    } else if (!correctWindow) {
-      if (timer < 4) {
-        summary = 'Released too early. The impure blood was not fully drained, leaving the swelling and pain unresolved.';
-        updateConsequences({ pain: 6, inflammation: 8, trust: -4 });
-        updateScroll({ precision: -2 });
-        setSushrutaDialogue({
-          speaker: 'Acharya Sushruta',
-          text: 'You panicked and removed it too early. A healer must possess the patience of the earth. The humors are still blockaded.',
-          expression: 'thoughtful'
-        });
+    const isCorrectLeech = selectedLeech === 'medicinal';
+    const isCorrectTiming = timer >= 4.0 && timer <= 5.2;
+
+    if (selectedLeech === 'poisonous') {
+      handleFailure('Toxic leech injected poison! Patient collapsed with burning fever.');
+      updateConsequences({ pain: 25, infection: 30, trust: -20 });
+    } else if (!isCorrectTiming) {
+      if (timer < 4.0) {
+        setActiveStatus('Removed too early. Swelling remains congested and painful.');
+        flashSushrutaAlert('Too early! Impure blood remains blockaded.');
+        updateConsequences({ pain: 10, trust: -5 });
       } else {
-        summary = 'Released too late. The leech finished the bad blood and drew healthy blood, leaving the patient pale and weak.';
-        updateConsequences({ bloodLoss: 15, pain: 8, trust: -6 });
-        updateScroll({ precision: -4 });
-        setSushrutaDialogue({
-          speaker: 'Acharya Sushruta',
-          text: 'Too late! You allowed the creature to gorge on his vital strength. Observe the guard\'s pale skin next time.',
-          expression: 'concerned'
-        });
+        handleFailure('Removed too late! Healthy blood was drained, leaving patient pale.');
+        updateConsequences({ bloodLoss: 25, trust: -12 });
       }
-      addHistory(`Stage 1: Leech removed at ${timer} seconds (incorrect window).`);
     } else {
-      summary = 'Perfect release! The swelling collapsed, the color returned to normal, and the guard thanked you with a deep breath of relief.';
-      updateConsequences({ inflammation: -25, pain: -18, bloodLoss: -10, trust: 15, recovery: 15 });
-      updateScroll({ observation: 8, precision: 8, surgicalControl: 6 });
-      addHistory('Stage 1: Perfect timing. Swelling resolved.');
-      setSushrutaDialogue({
-        speaker: 'Acharya Sushruta',
-        text: 'Splendidly done, my disciple! You timed the release perfectly as the swelling receded. You have taken your first true step as a surgeon.',
-        expression: 'approving'
-      });
+      // Success!
+      setIsSuccess(true);
+      setActiveStatus('Success! Impure blood drained, swelling resolved, pulse stabilized.');
+      flashSushrutaAlert('Masterful timing. The leg is healed. Chapter 2 is unlocked!');
+      updateScroll({ observation: 10, precision: 10 });
+      updateConsequences({ inflammation: -30, pain: -20, trust: 20 });
+      setUnlockedStages([1, 2]); // Progression trigger!
     }
+  };
 
-    setOutcome(summary);
-    setIsComplete(true);
-  }
+  const handleFailure = (msg: string) => {
+    setIsFinished(true);
+    setIsSuccess(false);
+    setAttached(false);
+    setActiveStatus(msg);
+    flashSushrutaAlert('Therapy failed. Re-evaluate the parameters.');
+  };
+
+  const handleReset = () => {
+    setSelectedLeech(null);
+    setAttached(false);
+    setTimer(0);
+    setSwelling(85);
+    setBloodPressure(130);
+    setBreathingRate(2.2);
+    setIsFinished(false);
+    setIsSuccess(false);
+    setPoisonVeins(false);
+    setActiveStatus('Select a leech and place it to begin.');
+  };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-      {/* Simulation Workspace */}
-      <section className="space-y-6 rounded-[32px] border border-amber/15 bg-white/70 p-6 shadow-parchment relative">
-        <div className="border-b border-indigo/15 pb-4">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-amber">Chapter 1</span>
-          <h3 className="font-serif text-2xl font-bold text-indigo">The Pressure Test</h3>
-          <p className="mt-1 text-sm text-indigo/70">
-            A royal guard of Kashi lies in the courtyard with a severely swollen military wound. Choose the medicinal leech and monitor the blood-letting.
-          </p>
-        </div>
-
-        {/* The Bamboo Bed (Patient Visuals) */}
-        <div className="relative overflow-hidden rounded-[24px] border border-amber/20 bg-gradient-to-br from-amber-100/40 via-parchment/60 to-amber-200/20 p-6 shadow-inner">
-          {/* Bamboo Woven Pattern Overlay */}
-          <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#b36b32_1.5px,transparent_1.5px)] [background-size:12px_12px]" />
-
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="space-y-2">
-              <span className="rounded-full bg-indigo/5 border border-indigo/10 px-3 py-1 text-xs font-semibold text-indigo">
-                Patient: Kashi Royal Guard
-              </span>
-              <div className="mt-4 space-y-2 text-sm text-indigo/80">
-                <p><strong>Respiration:</strong> {patientStatus.breathing}</p>
-                <p><strong>Skin Appearance:</strong> {patientStatus.skinColor}</p>
-                <p><strong>Pulse Rate:</strong> {patientStatus.pulse}</p>
-              </div>
-            </div>
-
-            {/* Swelling Visual Meter */}
-            <div className="flex flex-col items-center gap-2 rounded-2xl bg-white/60 p-4 border border-indigo/5 w-40">
-              <span className="text-xs font-bold text-indigo/70 uppercase">Wound Swelling</span>
-              <div className="relative w-8 h-28 rounded-full bg-indigo/5 border border-indigo/10 overflow-hidden">
+    <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr] h-full items-stretch">
+      {/* Simulation Screen */}
+      <div className="flex flex-col justify-between rounded-[24px] border border-stone-800 bg-stone-950 p-6 relative overflow-hidden shadow-2xl">
+        
+        {/* Breathing Torso visual indicator */}
+        <div className="flex justify-between items-center bg-stone-900/50 p-3 rounded-2xl border border-stone-800/60 mb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">🫁</span>
+            <div>
+              <span className="text-[10px] text-stone-500 uppercase font-bold">Chest Respiration</span>
+              <div className="flex items-center gap-1 mt-0.5">
+                {/* Visual breathing bar */}
                 <motion.div
                   animate={{
-                    height: attached ? `${Math.max(10, 100 - timer * 15)}%` : '100%'
+                    scaleY: [1, 1.3, 1],
+                    opacity: [0.7, 1, 0.7]
                   }}
-                  transition={{ duration: 0.8 }}
-                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-danger to-amber-600 rounded-b-full"
+                  transition={{
+                    repeat: Infinity,
+                    duration: breathingRate,
+                    ease: 'easeInOut'
+                  }}
+                  className="w-4 h-3 bg-herbal rounded origin-bottom"
                 />
+                <span className="text-xs font-bold text-stone-300">
+                  {breathingRate < 1.0 ? 'Rapid Gasps' : 'Stable Breath'}
+                </span>
               </div>
-              <span className="text-xs font-bold text-danger">
-                {attached ? `${Math.max(10, 100 - timer * 15)}% Height` : '100% Height'}
-              </span>
             </div>
+          </div>
+
+          <div className="text-right">
+            <span className="text-[10px] text-stone-500 uppercase font-bold">Fluid Pressure</span>
+            <p className="text-xs font-bold text-stone-200 mt-0.5">{Math.round(bloodPressure)} mmHg</p>
           </div>
         </div>
 
-        {/* Leech Clay Containers */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-bold text-indigo uppercase tracking-wider">Leech Vessels (Clay Jars)</h4>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {availableLeeches.map((option) => (
+        {/* Dynamic SVG Leg model */}
+        <div className="flex-1 min-h-[220px] flex items-center justify-center relative bg-stone-900/20 border border-stone-800/30 rounded-[20px] overflow-hidden my-2">
+          
+          <svg viewBox="0 0 400 180" className="w-full max-w-[420px] overflow-visible">
+            {/* Outline leg structure */}
+            <path
+              d="M 20,90 Q 120,40 220,50 T 380,80 L 380,105 T 220,120 Q 120,130 20,100 Z"
+              fill="#1c1917"
+              stroke="#b36b32"
+              strokeWidth="2.5"
+              className="transition-colors duration-500"
+              style={{
+                fill: poisonVeins ? '#0c1a0f' : isFinished && !isSuccess ? '#2c1e1c' : '#1c1917'
+              }}
+            />
+
+            {/* Vein pathways */}
+            <path
+              d="M 40,92 Q 130,55 210,65 T 350,90"
+              fill="none"
+              stroke={poisonVeins ? '#052e16' : '#991b1b'}
+              strokeWidth="2"
+              className="opacity-80"
+            />
+            
+            {/* Pulsing blood pressure circle */}
+            <motion.circle
+              cx="180"
+              cy="70"
+              r="10"
+              fill={poisonVeins ? 'none' : '#ef4444'}
+              className="opacity-25"
+              animate={{
+                scale: attached ? [1, 1.6, 1] : [1, 1.25, 1]
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: attached ? 0.4 : 1.2,
+                ease: 'easeInOut'
+              }}
+            />
+
+            {/* Swelling Dome Visual (expands/contracts live) */}
+            <circle
+              cx="180"
+              cy="72"
+              r={swelling * 0.45}
+              fill="url(#swelling-gradient)"
+              className="opacity-75 transition-all duration-300"
+            />
+
+            {/* Attached Leech rendering */}
+            {attached && (
+              <motion.path
+                d="M 180,72 Q 190,50 170,45"
+                fill="none"
+                stroke="#3f6212"
+                strokeWidth="6"
+                strokeLinecap="round"
+                animate={{
+                  strokeWidth: [6, 8, 6],
+                  d: ['M 180,72 Q 190,50 170,45', 'M 180,72 Q 185,48 175,47', 'M 180,72 Q 190,50 170,45']
+                }}
+                transition={{ repeat: Infinity, duration: 0.6 }}
+              />
+            )}
+
+            {/* Gradients */}
+            <defs>
+              <radialGradient id="swelling-gradient">
+                <stop offset="0%" stopColor={poisonVeins ? '#15803d' : '#881337'} />
+                <stop offset="60%" stopColor={poisonVeins ? '#166534' : '#be123c'} stopOpacity="0.4" />
+                <stop offset="100%" stopColor="#1c1917" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+          </svg>
+
+          {/* Poison Vein overlay notification */}
+          {poisonVeins && (
+            <div className="absolute inset-0 bg-emerald-950/10 pointer-events-none border border-emerald-500/20 rounded-[20px] animate-pulse" />
+          )}
+
+          {/* Swelling meter overlay */}
+          <div className="absolute bottom-4 left-4 flex flex-col gap-0.5">
+            <span className="text-[9px] font-bold text-stone-500 uppercase tracking-widest">Active Swelling</span>
+            <span className="text-sm font-black text-amber">{Math.round(swelling)}% Height</span>
+          </div>
+
+          {/* Live timer overlay */}
+          {attached && (
+            <div className="absolute top-4 right-4 bg-stone-950/80 border border-stone-800 rounded-full px-3 py-1 text-[10px] font-bold text-amber">
+              ⏱️ Sucking: {timer.toFixed(1)}s
+            </div>
+          )}
+        </div>
+
+        {/* Leech Clay pots */}
+        <div className="space-y-2 mt-4">
+          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">Clay Leeches Vessels</span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {leechesList.map((leech) => (
               <button
-                key={option.id}
+                key={leech.id}
                 type="button"
-                onClick={() => handleLeechSelection(option)}
-                className={`group relative overflow-hidden rounded-[24px] border p-4 text-left transition-all ${
-                  selectedLeech?.id === option.id
-                    ? 'border-amber bg-amber/10 shadow-md'
-                    : 'border-indigo/10 bg-white/90 hover:border-amber/40 hover:bg-parchment/30'
-                }`}
-                disabled={attached}
+                onClick={() => setSelectedLeech(leech.id)}
+                disabled={attached || isFinished}
+                className={`group rounded-2xl border p-3.5 text-left transition-all ${
+                  selectedLeech === leech.id
+                    ? 'border-amber bg-stone-900 text-stone-100 shadow-lg'
+                    : 'border-stone-800 bg-stone-950 hover:border-stone-700'
+                } disabled:opacity-50`}
               >
-                <div className="flex justify-between items-center border-b border-indigo/5 pb-2">
-                  <span className="font-serif font-bold text-indigo text-base">{option.name}</span>
-                  <span className="text-xs text-amber font-bold uppercase tracking-wider">{option.category}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`w-3.5 h-3.5 rounded-full border-2 ${leech.color} ${leech.glow}`} />
+                  <span className="font-serif font-bold text-sm">{leech.name}</span>
                 </div>
-                <ul className="mt-3 space-y-1.5 text-xs text-indigo/70">
-                  <li><strong>Skin:</strong> {option.texture}</li>
-                  <li><strong>Pulse:</strong> {option.movement}</li>
-                  <li><strong>Color:</strong> {option.color}</li>
-                  <li><strong>Mouth:</strong> {option.head}</li>
-                </ul>
-                <p className="mt-3 text-[11px] italic text-indigo/60 border-t border-indigo/5 pt-2">
-                  {option.description}
+                <p className="text-[10px] text-stone-500 font-light mt-1.5 leading-4">
+                  {leech.skin} • {leech.speed}
                 </p>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-indigo/10 pt-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleAttach}
-              disabled={!selectedLeech || attached}
-              className="rounded-full bg-gradient-to-r from-herbal to-emerald-700 px-6 py-3 text-sm font-bold text-white shadow-md hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:opacity-50"
-            >
-              Attach Leech
-            </button>
-            <button
-              type="button"
-              onClick={handleRemove}
-              disabled={!attached || isComplete}
-              className="rounded-full border border-indigo/10 bg-parchment px-6 py-3 text-sm font-bold text-indigo shadow-sm hover:bg-indigo/5 active:scale-95 disabled:cursor-not-allowed disabled:text-slate-400 disabled:opacity-50"
-            >
-              Release with Honey
-            </button>
-          </div>
+        {/* Surgical Controls */}
+        <div className="flex flex-wrap items-center gap-3 border-t border-stone-850 pt-4 mt-4">
+          <button
+            type="button"
+            onClick={handleAttach}
+            disabled={!selectedLeech || attached || isFinished}
+            className="flex-1 min-w-[120px] rounded-full bg-gradient-to-r from-herbal to-emerald-700 py-3 text-xs font-bold uppercase tracking-wider text-white hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Apply Leech
+          </button>
+          
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={!attached || isFinished}
+            className="flex-1 min-w-[120px] rounded-full border border-stone-800 bg-stone-900/60 py-3 text-xs font-bold uppercase tracking-wider text-stone-300 hover:bg-stone-850 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Sponge Turmeric (Release)
+          </button>
 
-          <div className="rounded-2xl bg-indigo/5 px-4 py-3 text-sm font-semibold text-indigo">
-            {attached ? (
-              <span className="text-amber animate-pulse">
-                ⏳ Drawing Blood: {timer} seconds
-              </span>
-            ) : (
-              <span>⌛ Start therapy to trigger timing</span>
-            )}
-          </div>
+          {isFinished && (
+            <button
+              type="button"
+              onClick={handleReset}
+              className="rounded-full bg-stone-800 px-5 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-stone-700"
+            >
+              Reset Anvil
+            </button>
+          )}
         </div>
-      </section>
+      </div>
 
-      {/* Narrative & Scroll Panels */}
-      <aside className="space-y-6">
-        {/* Outcome Box */}
-        <div className="rounded-[32px] border border-amber/15 bg-amber-50/50 p-5 shadow-parchment">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-amber">Observations</span>
-          <h4 className="font-serif text-lg font-bold text-indigo mt-1 border-b border-indigo/5 pb-2">Therapy Narrative</h4>
-          <p className="mt-3 text-sm leading-6 text-indigo/80">
-            {outcome}
+      {/* Real-time Game Log / Results */}
+      <div className="flex flex-col justify-between rounded-[24px] border border-stone-800 bg-stone-900/40 p-6">
+        <div className="space-y-4">
+          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Surgical Report</span>
+          <h4 className="font-serif text-lg font-bold text-stone-200 border-b border-stone-800 pb-2">Diagnostic Log</h4>
+          <p className="text-xs leading-6 text-stone-300 font-light italic">
+            "{activeStatus}"
           </p>
         </div>
 
-        {/* Epistemology Manuscript Scroll */}
-        <div className="rounded-[32px] border border-indigo/15 bg-parchment-scroll p-6 shadow-parchment relative">
-          <div className="absolute top-0 bottom-0 left-4 w-[1px] bg-amber-700/10" />
-          <div className="pl-6">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-amber">Epistemological Source</span>
-            <h4 className="font-serif text-lg font-bold text-indigo mt-1 border-b border-indigo/10 pb-2">
-              Manuscript Fragment
-            </h4>
-            <p className="mt-4 text-sm leading-7 text-indigo/80 italic font-light">
-              {activeFragment}
-            </p>
+        {isFinished && (
+          <div className="border-t border-stone-800 pt-4 space-y-4 mt-6">
+            <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest block">Chapter Verdict</span>
+            
+            {isSuccess ? (
+              <div className="rounded-xl border border-herbal/30 bg-herbal/10 p-4 text-center">
+                <span className="text-2xl block mb-1">🎉</span>
+                <span className="text-sm font-bold text-herbal uppercase tracking-wider block">Chapter Mastered</span>
+                <p className="text-[11px] text-stone-300 font-light mt-1.5">
+                  Swelling successfully resolved. The guard returns to duty. Chapter 2 has been unlocked.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-center">
+                <span className="text-2xl block mb-1">⚠️</span>
+                <span className="text-sm font-bold text-danger uppercase tracking-wider block">Disciple Failed</span>
+                <p className="text-[11px] text-stone-300 font-light mt-1.5">
+                  The treatment resulted in patient distress or excessive blood loss. Reset the anvil to try again.
+                </p>
+              </div>
+            )}
           </div>
-        </div>
-      </aside>
+        )}
+      </div>
     </div>
   );
 }
