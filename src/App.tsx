@@ -1,17 +1,56 @@
-import { useMemo, useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { AnimatePresence, motion } from 'framer-motion';
-import { SimulationProvider, useSimulation } from './systems/SimulationProvider';
-import Stage1 from './stages/stage1/Stage1';
-import Stage2 from './stages/stage2/Stage2';
-import Stage3 from './stages/stage3/Stage3';
-import Stage4 from './stages/stage4/Stage4';
-import { useReducedMotion } from './hooks/useReducedMotion';
+import { useGameStore, GameMode } from './store/gameStore';
+import World from './components/game/World';
+import Player from './components/game/Player';
+import Stage1View from './components/game/Stage1View';
+import Stage2View from './components/game/Stage2View';
+import Stage3View from './components/game/Stage3View';
+import SandboxView from './components/game/SandboxView';
+import * as THREE from 'three';
 
-const stageList = [
-  { id: 1, label: 'Pressure Test', location: 'Leech Therapy' },
-  { id: 2, label: 'Marma Precision', location: 'Skill Challenge' },
-  { id: 3, label: 'Reconstruction Academy', location: 'Survival Mode' }
-];
+// Camera controller scripting
+function CameraController() {
+  const { gameMode, stage, playerPosition } = useGameStore();
+
+  useFrame((state) => {
+    const elapsed = state.clock.getElapsedTime();
+
+    if (gameMode === 'menu' || gameMode === 'settings') {
+      // Slow drift around center
+      const r = 13;
+      const x = Math.sin(elapsed * 0.08) * r;
+      const z = Math.cos(elapsed * 0.08) * r;
+      state.camera.position.lerp(new THREE.Vector3(x, 6, z), 0.04);
+      state.camera.lookAt(0, 1.5, 0);
+    } else if (gameMode === 'play-active') {
+      if (stage === 1) {
+        // Follow player
+        const px = playerPosition[0];
+        const pz = playerPosition[2];
+        state.camera.position.lerp(new THREE.Vector3(px, 5.0, pz + 6.5), 0.08);
+        state.camera.lookAt(px, 0.8, pz);
+      } else if (stage === 2) {
+        // Close-up Cot 2
+        state.camera.position.lerp(new THREE.Vector3(6, 1.4, -6.0), 0.08);
+        state.camera.lookAt(6, 0.6, -8);
+      } else if (stage === 3) {
+        // Follow player in ward
+        const px = playerPosition[0];
+        const pz = playerPosition[2];
+        state.camera.position.lerp(new THREE.Vector3(px, 5.5, pz + 7.5), 0.08);
+        state.camera.lookAt(px, 0.8, pz);
+      }
+    } else if (gameMode === 'sandbox') {
+      // Focus sandbox
+      state.camera.position.lerp(new THREE.Vector3(3.0, 2.2, -1.2), 0.08);
+      state.camera.lookAt(3.0, 0.6, -4);
+    }
+  });
+
+  return null;
+}
 
 function GameApp() {
   const {
@@ -19,169 +58,155 @@ function GameApp() {
     setGameMode,
     stage,
     setStage,
-    unlockedStages,
-    timeOfDay,
-    sushrutaAlert,
-    completedCinematic,
-    setCompletedCinematic,
-    highScores
-  } = useSimulation();
+    highScores,
+    score,
+    lives,
+    heldItem,
+    sushrutaAlert
+  } = useGameStore();
 
-  const reducedMotion = useReducedMotion();
   const [showSettings, setShowSettings] = useState(false);
-  const [introTimer, setIntroTimer] = useState(0);
-
-  // Quick 15s atmospheric intro
-  const runIntro = () => {
-    setCompletedCinematic(false);
-    setIntroTimer(1);
-    window.setTimeout(() => {
-      setCompletedCinematic(true);
-      setGameMode('menu');
-    }, 12000);
-  };
-
-  const activeStageComponent = useMemo(() => {
-    if (stage === 1) return <Stage1 />;
-    if (stage === 2) return <Stage2 />;
-    return <Stage3 />;
-  }, [stage]);
-
-  const currentTODClass = {
-    morning: 'from-stone-900 via-stone-950 to-amber-950/20',
-    afternoon: 'from-stone-950 via-stone-900 to-orange-950/15',
-    evening: 'from-stone-900 via-stone-950 to-red-950/20',
-    night: 'from-stone-950 via-stone-950 to-indigo-950/30'
-  }[timeOfDay];
+  const [completedCinematic, setCompletedCinematic] = useState(true);
 
   return (
-    <div className={`relative min-h-screen bg-gradient-to-b ${currentTODClass} text-stone-100 overflow-x-hidden font-sans select-none`}>
-      {/* Flicker candles ambient overlay */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(179,107,50,0.06),transparent_50%)] animate-pulse" />
-      <div className="pointer-events-none absolute inset-0 opacity-5 bg-[linear-gradient(rgba(179,107,50,0.15)_1px,transparent_1px),linear-gradient(90deg,rgba(179,107,50,0.15)_1px,transparent_1px)] bg-[size:32px_32px]" />
+    <div className="relative w-screen h-screen bg-stone-950 text-stone-100 overflow-hidden font-sans select-none">
+      
+      {/* 3D WebGL Canvas Layer */}
+      <div className="absolute inset-0 z-0">
+        <Canvas shadows camera={{ position: [0, 5, 8], fov: 50 }}>
+          <CameraController />
+          <World />
+          
+          {/* Load active 3D stage components */}
+          {gameMode === 'play-active' && (
+            <>
+              {stage === 1 && <Stage1View />}
+              {stage === 2 && <Stage2View />}
+              {stage === 3 && <Stage3View />}
+            </>
+          )}
 
-      {/* Floating Sushruta Alert Overlay (Flash style, disappears after 2.5s) */}
-      <AnimatePresence>
-        {sushrutaAlert && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: -20, x: '-50%' }}
-            animate={{ opacity: 1, scale: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, scale: 0.9, y: -20, x: '-50%' }}
-            transition={{ duration: 0.3 }}
-            className="fixed top-6 left-1/2 z-50 rounded-full border border-amber/30 bg-stone-900/95 px-6 py-2 text-xs font-bold text-amber shadow-2xl flex items-center gap-2"
-          >
-            <span>🕉️ Acharya:</span>
-            <span className="text-white italic">"{sushrutaAlert}"</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          {gameMode === 'sandbox' && <SandboxView />}
 
-      {/* Intro cinematic blocker (Max 12 seconds) */}
-      <AnimatePresence>
-        {!completedCinematic && introTimer > 0 && (
-          <motion.div
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-stone-950 text-center p-8"
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(179,107,50,0.12),transparent_70%)]" />
+          {/* Load walkable player healer avatar */}
+          {gameMode === 'play-active' && (stage === 1 || stage === 3) && <Player />}
+        </Canvas>
+      </div>
+
+      {/* Glassmorphic UI HUD overlays */}
+      <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-6">
+        
+        {/* Floating Sushruta warning banner */}
+        <AnimatePresence>
+          {sushrutaAlert && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1.5 }}
-              className="relative max-w-md space-y-4"
+              initial={{ opacity: 0, scale: 0.9, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: -20 }}
+              className="absolute top-6 left-1/2 -translate-x-1/2 rounded-full border border-amber/30 bg-stone-900/95 px-6 py-2.5 text-xs font-bold text-amber shadow-2xl flex items-center gap-2 pointer-events-auto"
             >
-              <span className="text-4xl">🕉️</span>
-              <h2 className="font-serif text-3xl font-bold text-amber tracking-wider">KASHI, 600 BCE</h2>
-              <p className="text-sm leading-6 text-stone-300 font-light">
-                "Welcome to Sushruta's Gurukul. Here, hands must learn before the mind commands. Live the ancient teachings of surgery."
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setCompletedCinematic(true);
-                  setGameMode('menu');
-                }}
-                className="mt-6 rounded-full border border-amber/30 bg-amber/10 px-6 py-2 text-xs font-bold text-amber hover:bg-amber/20"
-              >
-                Skip Intro
-              </button>
+              <span>🕉️ Acharya:</span>
+              <span className="text-white italic">"{sushrutaAlert}"</span>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      {/* Main Game views */}
-      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 flex flex-col min-h-screen">
-        {gameMode === 'menu' && (
-          /* Main Menu view */
-          <div className="flex-1 flex flex-col items-center justify-center py-20 relative">
+        {/* TOP BAR HUD: Left / Right options */}
+        <div className="flex justify-between items-start w-full">
+          {/* Back button / Navigation */}
+          {gameMode !== 'menu' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (gameMode === 'play-active') setGameMode('play');
+                else setGameMode('menu');
+              }}
+              className="rounded-full border border-stone-800 bg-stone-900/80 backdrop-blur-md px-4 py-2 text-xs font-bold text-stone-200 hover:bg-stone-850 active:scale-95 transition-all pointer-events-auto shadow-lg"
+            >
+              ← Exit Mode
+            </button>
+          )}
+          <div />
+
+          {/* Held item visualization */}
+          {gameMode === 'play-active' && heldItem && (
+            <div className="rounded-full bg-amber/20 border border-amber/40 backdrop-blur-md px-4 py-2 text-xs font-bold text-amber shadow-lg animate-pulse">
+              ✋ Tool: {heldItem.replace('_', ' ').toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        {/* MIDDLE CONTENT: Menu systems */}
+        <div className="flex-1 flex items-center justify-center pointer-events-auto">
+          {gameMode === 'menu' && (
+            /* Main Menu */
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="text-center space-y-8 max-w-lg relative z-10"
+              className="bg-stone-950/75 border border-stone-900 backdrop-blur-md rounded-3xl p-8 text-center max-w-sm w-full space-y-6 shadow-2xl"
             >
               <div>
-                <span className="text-xs font-bold uppercase tracking-[0.4em] text-amber">Gurukul Simulation</span>
-                <h1 className="mt-2 font-serif text-4xl font-extrabold tracking-wider text-stone-100 sm:text-5xl uppercase">
+                <span className="text-[10px] font-bold tracking-[0.4em] text-amber uppercase">3D Surgical Game</span>
+                <h1 className="font-serif text-3xl font-extrabold tracking-widest text-stone-100 uppercase mt-1">
                   Living Lancets
                 </h1>
               </div>
 
-              {/* Menu selections */}
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2.5">
                 <button
                   type="button"
                   onClick={() => setGameMode('play')}
-                  className="w-full rounded-[24px] bg-gradient-to-r from-amber to-copper py-4 text-sm font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest"
+                  className="w-full rounded-2xl bg-gradient-to-r from-amber to-copper py-3.5 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all uppercase tracking-wider"
                 >
                   PLAY
                 </button>
                 <button
                   type="button"
                   onClick={() => setGameMode('sandbox')}
-                  className="w-full rounded-[24px] border border-amber/20 bg-stone-900/60 py-4 text-sm font-bold text-amber hover:bg-stone-900/90 active:scale-95 transition-all uppercase tracking-widest"
+                  className="w-full rounded-2xl border border-amber/20 bg-stone-900/40 py-3.5 text-xs font-bold text-amber hover:bg-stone-900/80 active:scale-95 transition-all uppercase tracking-wider"
                 >
                   SANDBOX
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowSettings(true)}
-                  className="w-full rounded-[24px] border border-stone-800 bg-stone-900/30 py-3 text-xs font-bold text-stone-400 hover:text-stone-200 active:scale-95 transition-all uppercase tracking-widest"
+                  className="w-full rounded-2xl border border-stone-800 bg-stone-900/20 py-3 text-xs font-bold text-stone-400 hover:text-stone-300 active:scale-95 transition-all uppercase tracking-wider"
                 >
                   SETTINGS
                 </button>
               </div>
 
-              {/* High Score panel in Main Menu */}
+              {/* High Score Records */}
               {(highScores.stage3MaxSaved > 0 || highScores.stage1BestTime !== null) && (
-                <div className="mt-4 p-4 rounded-2xl border border-stone-800/80 bg-stone-950/40 text-left text-xs space-y-1.5 text-stone-400 max-w-xs mx-auto">
-                  <p className="text-[10px] font-bold text-amber uppercase tracking-wider text-center border-b border-stone-850 pb-1 mb-2">Record Hall</p>
-                  {highScores.stage1BestTime !== null && <p>⏱️ Pressure Test Best: <span className="text-stone-200 font-bold">{highScores.stage1BestTime.toFixed(1)}s</span></p>}
-                  {highScores.stage2BestTime !== null && <p>⏱️ Marma Best: <span className="text-stone-200 font-bold">{highScores.stage2BestTime.toFixed(1)}s</span></p>}
-                  {highScores.stage3MaxSaved > 0 && <p>🌾 Survival Max Saved: <span className="text-stone-200 font-bold">{highScores.stage3MaxSaved} patients</span></p>}
-                  <p>🎖️ Surgeon Rank: <span className="text-amber font-bold">{highScores.bestRank}</span></p>
+                <div className="p-3 bg-stone-950/40 border border-stone-850 rounded-xl text-left text-[10px] space-y-1 text-stone-400">
+                  <p className="text-amber font-bold text-center uppercase tracking-widest border-b border-stone-850 pb-1 mb-1.5">Camp Records</p>
+                  {highScores.stage1BestTime !== null && <p>⏱️ Stage 1: <span className="text-stone-200 font-bold">{highScores.stage1BestTime.toFixed(1)}s</span></p>}
+                  {highScores.stage2BestTime !== null && <p>⏱️ Stage 2: <span className="text-stone-200 font-bold">{highScores.stage2BestTime.toFixed(1)}s</span></p>}
+                  {highScores.stage3MaxSaved > 0 && <p>🌾 Stage 3 Survival: <span className="text-stone-200 font-bold">{highScores.stage3MaxSaved} saved</span></p>}
+                  <p>🎖️ Title: <span className="text-amber font-bold">{highScores.bestRank}</span></p>
                 </div>
               )}
-
-              <p className="text-[10px] text-stone-500 font-light">
-                Developed in compliance with the Sushruta Samhita.
-              </p>
             </motion.div>
-          </div>
-        )}
+          )}
 
-        {gameMode === 'play' && (
-          /* Stage Select Screen */
-          <div className="flex-1 flex flex-col justify-center max-w-xl mx-auto py-10 space-y-6">
-            <div className="text-center">
-              <span className="text-xs font-bold text-amber uppercase tracking-wider">Free Play Modes</span>
-              <h2 className="font-serif text-2xl font-bold text-stone-100 mt-1">Select Surgical Challenge</h2>
-            </div>
+          {gameMode === 'play' && (
+            /* Free Play Selection Menu */
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-stone-950/75 border border-stone-900 backdrop-blur-md rounded-3xl p-8 max-w-md w-full space-y-6 shadow-2xl"
+            >
+              <div className="text-center">
+                <span className="text-[10px] font-bold text-amber uppercase tracking-wider">Play Selection</span>
+                <h2 className="font-serif text-2xl font-bold text-stone-100 mt-0.5">Gurukul Clearings</h2>
+              </div>
 
-            <div className="space-y-3">
-              {stageList.map((stg) => {
-                return (
+              <div className="space-y-3">
+                {[
+                  { id: 1, label: 'Pressure Test', desc: 'Walk WASD to pond, grab leech, apply to cot.' },
+                  { id: 2, label: 'Marma Precision', desc: 'Leg closeup, rotate leg, inspect nodes via Lens.' },
+                  { id: 3, label: 'Reconstruction Camp', desc: 'Dynamic triage survival, stabilize ward mats.' }
+                ].map((stg) => (
                   <button
                     key={stg.id}
                     type="button"
@@ -189,131 +214,82 @@ function GameApp() {
                       setStage(stg.id);
                       setGameMode('play-active');
                     }}
-                    className="w-full rounded-[24px] border border-amber/25 bg-stone-900/80 hover:border-amber/60 hover:bg-stone-900 p-5 text-left transition-all relative overflow-hidden flex items-center justify-between"
+                    className="w-full rounded-2xl border border-amber/25 bg-stone-900/60 p-4 text-left hover:border-amber/60 hover:bg-stone-900/80 transition-all flex items-center justify-between"
                   >
                     <div>
-                      <span className="text-[10px] font-bold text-amber/60 uppercase">Mode {stg.id}</span>
-                      <h4 className="font-serif text-lg font-bold text-stone-200 mt-1">{stg.label}</h4>
-                      <p className="text-[10px] text-stone-500 uppercase font-semibold mt-0.5">{stg.location}</p>
+                      <span className="text-[9px] font-bold text-amber/60 uppercase">Mode {stg.id}</span>
+                      <h4 className="font-serif text-md font-bold text-stone-200">{stg.label}</h4>
+                      <p className="text-[10px] text-stone-500 font-light mt-0.5">{stg.desc}</p>
                     </div>
-                    <div>
-                      <span className="text-amber text-xs font-bold uppercase tracking-wider">ENTER</span>
-                    </div>
+                    <span className="text-amber text-xs font-bold uppercase tracking-wider">ENTER</span>
                   </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setGameMode('menu')}
-              className="w-full text-center text-xs text-stone-500 hover:text-stone-300 underline font-bold"
-            >
-              Return to Main Menu
-            </button>
-          </div>
-        )}
-
-        {gameMode === 'play-active' && (
-          /* Active Gameplay screen */
-          <div className="flex-1 flex flex-col gap-4">
-            {/* Top Minimal HUD (Scores) */}
-            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setGameMode('play')}
-                  className="rounded-full border border-stone-800 bg-stone-900/40 px-3 py-1.5 text-xs text-stone-300 hover:bg-stone-900"
-                >
-                  Leave Stage
-                </button>
-                <span className="text-xs font-bold text-amber uppercase">
-                  {stageList.find((item) => item.id === stage)?.label}
-                </span>
+                ))}
               </div>
-              <span className="text-[9px] font-bold text-stone-500 uppercase tracking-widest">
-                Direct Bodily Assessment Active
-              </span>
-            </div>
 
-            {/* Active stage component */}
-            <div className="flex-1">
-              {activeStageComponent}
-            </div>
-          </div>
-        )}
-
-        {gameMode === 'sandbox' && (
-          /* Sandbox (Tool Forge / scenario creator) */
-          <div className="flex-1 flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
               <button
                 type="button"
                 onClick={() => setGameMode('menu')}
-                className="rounded-full border border-stone-800 bg-stone-900/40 px-3 py-1.5 text-xs text-stone-300 hover:bg-stone-900"
+                className="w-full text-center text-xs text-stone-500 hover:text-stone-300 underline font-bold"
               >
-                Exit Sandbox
+                Return to Menu
               </button>
-              <span className="text-xs font-bold text-amber uppercase tracking-wider">
-                Loha-Sala (Blacksmith Forge & Anvil Sandbox)
-              </span>
-            </div>
-            
-            <div className="flex-1">
-              <Stage4 />
-            </div>
+            </motion.div>
+          )}
+        </div>
+
+        {/* BOTTOM HUD STATUS info */}
+        <div className="flex justify-between items-end w-full">
+          <div className="text-[9px] text-stone-600 font-semibold tracking-wider">
+            Vibrant 3D ancient India healer clearing
           </div>
-        )}
+
+          {gameMode === 'play-active' && (stage === 1 || stage === 3) && (
+            <div className="text-[9px] text-stone-500 bg-stone-900/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-stone-850">
+              🎮 Movement: <span className="font-bold text-white">W A S D</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Settings Modal */}
+      {/* Settings Panel modal */}
       <AnimatePresence>
         {showSettings && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 pointer-events-auto"
           >
             <motion.div
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="max-w-md w-full rounded-[32px] border border-stone-800 bg-stone-900 p-6 space-y-6 text-center shadow-2xl"
+              className="max-w-xs w-full rounded-3xl border border-stone-800 bg-stone-900 p-6 space-y-6 text-center shadow-2xl"
             >
-              <h3 className="font-serif text-xl font-bold text-amber">Academy Settings</h3>
+              <h3 className="font-serif text-lg font-bold text-amber uppercase tracking-wider">Gurukul Settings</h3>
               
-              <div className="space-y-4 text-left text-sm text-stone-300">
-                <div className="flex items-center justify-between border-b border-stone-800 pb-2">
-                  <span>Atmospheric sound cues</span>
-                  <span className="text-xs text-herbal font-bold">ACTIVE</span>
+              <div className="space-y-3 text-left text-xs text-stone-300">
+                <div className="flex justify-between border-b border-stone-850 pb-2">
+                  <span>Soft Shadows rendering</span>
+                  <span className="text-xs text-emerald-500 font-bold">ACTIVE</span>
                 </div>
-                <div className="flex items-center justify-between border-b border-stone-800 pb-2">
-                  <span>Dynamic camera breathing</span>
-                  <span className="text-xs text-herbal font-bold">ACTIVE</span>
+                <div className="flex justify-between border-b border-stone-850 pb-2">
+                  <span>3D Foliage wind breeze</span>
+                  <span className="text-xs text-emerald-500 font-bold">ACTIVE</span>
                 </div>
-                <div className="flex items-center justify-between border-b border-stone-800 pb-2">
-                  <span>Flickering oil lamp filters</span>
-                  <span className="text-xs text-herbal font-bold">ACTIVE</span>
+                <div className="flex justify-between border-b border-stone-850 pb-2">
+                  <span>Third-person camera damping</span>
+                  <span className="text-xs text-emerald-500 font-bold">ACTIVE</span>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={runIntro}
-                  className="w-full rounded-full border border-amber/20 bg-amber-500/10 py-2.5 text-xs font-bold text-amber hover:bg-amber-500/20"
-                >
-                  Replay Kashi Cinematic Intro
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowSettings(false)}
-                  className="w-full rounded-full bg-stone-800 py-2.5 text-xs font-bold text-stone-300 hover:bg-stone-700"
-                >
-                  Close Settings
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowSettings(false)}
+                className="w-full rounded-full bg-stone-800 py-2.5 text-xs font-bold text-stone-300 hover:bg-stone-700"
+              >
+                Close Settings
+              </button>
             </motion.div>
           </motion.div>
         )}
@@ -322,12 +298,6 @@ function GameApp() {
   );
 }
 
-function App() {
-  return (
-    <SimulationProvider>
-      <GameApp />
-    </SimulationProvider>
-  );
+export default function App() {
+  return <GameApp />;
 }
-
-export default App;
