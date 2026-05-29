@@ -1,10 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: light;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
   background-color: #F6E7D2;
 }
 
@@ -16,6 +18,7 @@ body {
   margin: 0;
   background-image: radial-gradient(circle at top left, rgba(208, 144, 88, 0.12), transparent 25%),
     radial-gradient(circle at bottom right, rgba(75, 112, 92, 0.08), transparent 20%);
+  transition: background-color 1s ease-in-out, filter 1s ease-in-out;
 }
 
 * {
@@ -26,6 +29,47 @@ button, input, textarea, select {
   font: inherit;
 }
 
+.font-serif {
+  font-family: 'Lora', Georgia, serif;
+}
+
+.font-display {
+  font-family: 'Cinzel', serif;
+}
+
+/* Time of Day Atmospheric Filters */
+.tod-morning {
+  background-color: #F8ECD7;
+  filter: sepia(0.08) brightness(1.02) contrast(0.98);
+}
+
+.tod-afternoon {
+  background-color: #FBF6EF;
+  filter: sepia(0.02) brightness(1.05) contrast(1.0);
+}
+
+.tod-evening {
+  background-color: #F4E0C1;
+  filter: sepia(0.15) hue-rotate(-5deg) brightness(0.98) contrast(1.02);
+}
+
+.tod-night {
+  background-color: #EBD3B1;
+  filter: sepia(0.25) hue-rotate(-12deg) brightness(0.9) contrast(1.05);
+}
+
+/* Custom Scroll & UI patterns */
+.parchment-scroll {
+  background-color: #FAF5EC;
+  border: 1px solid rgba(43, 44, 99, 0.08);
+  box-shadow: 0 10px 40px rgba(45, 37, 18, 0.06), inset 0 0 40px rgba(179, 107, 50, 0.03);
+}
+
+.copper-engraved {
+  border: 2px solid #B36B32;
+  box-shadow: 0 0 15px rgba(179, 107, 50, 0.1), inset 0 0 20px rgba(179, 107, 50, 0.05);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -34,3 +78,4 @@ button, input, textarea, select {
     scroll-behavior: auto !important;
   }
 }
+

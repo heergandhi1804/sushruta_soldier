@@ -1,4 +1,16 @@
-export type RealityLayer = 'history' | 'ayurveda' | 'simulation';
+export type RealityLayer = 'pratyaksha' | 'shastra' | 'anumana';
+
+export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
+
+export type GurukulLocation = 
+  | 'courtyard' 
+  | 'garden' 
+  | 'hall' 
+  | 'recovery' 
+  | 'riverbank' 
+  | 'chamber' 
+  | 'library' 
+  | 'workshop';
 
 export interface ScrollMetrics {
   observation: number;
@@ -21,13 +33,18 @@ export interface ConsequenceMetrics {
 
 export interface PatientProfile {
   id: string;
+  name: string;
+  occupation: string;
   age: number;
   weight: number;
   condition: string;
+  story: string;
   painLevel: number;
   infectionRisk: number;
   urgency: number;
   status: 'waiting' | 'treated' | 'critical' | 'recovered';
+  visualId: string;
+  waitTime: number;
 }
 
 export interface ToolOption {
@@ -55,9 +72,16 @@ export interface Achievement {
   requirement: string;
 }
 
+export interface SushrutaDialogueState {
+  speaker: string;
+  text: string;
+  expression: 'calm' | 'thoughtful' | 'concerned' | 'approving' | 'storytelling';
+}
+
 export interface SavePayload {
   stage: number;
   scroll: ScrollMetrics;
   consequences: ConsequenceMetrics;
   history: string[];
 }
+
