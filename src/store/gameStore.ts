@@ -115,16 +115,30 @@ interface GameState {
 }
 
 export const useGameStore = create<GameState>((set, get) => {
-  // Load high scores
-  const rawScores = localStorage.getItem('sushruta-3d-high-scores');
-  const initialHighScores: HighScores = rawScores
-    ? JSON.parse(rawScores)
-    : {
-        stage1BestTime: null,
-        stage2BestTime: null,
-        stage3MaxSaved: 0,
-        bestRank: 'Disciple'
-      };
+  // Load high scores safely
+  let initialHighScores: HighScores = {
+    stage1BestTime: null,
+    stage2BestTime: null,
+    stage3MaxSaved: 0,
+    bestRank: 'Disciple'
+  };
+
+  try {
+    const rawScores = localStorage.getItem('sushruta-3d-high-scores');
+    if (rawScores) {
+      const parsed = JSON.parse(rawScores);
+      if (parsed && typeof parsed === 'object') {
+        initialHighScores = {
+          stage1BestTime: typeof parsed.stage1BestTime === 'number' ? parsed.stage1BestTime : null,
+          stage2BestTime: typeof parsed.stage2BestTime === 'number' ? parsed.stage2BestTime : null,
+          stage3MaxSaved: typeof parsed.stage3MaxSaved === 'number' ? parsed.stage3MaxSaved : 0,
+          bestRank: typeof parsed.bestRank === 'string' ? parsed.bestRank : 'Disciple'
+        };
+      }
+    }
+  } catch (e) {
+    // fallback to default
+  }
 
   return {
     gameMode: 'menu',
@@ -152,7 +166,11 @@ export const useGameStore = create<GameState>((set, get) => {
     updateHighScores: (changes) => {
       set((state) => {
         const next = { ...state.highScores, ...changes };
-        localStorage.setItem('sushruta-3d-high-scores', JSON.stringify(next));
+        try {
+          localStorage.setItem('sushruta-3d-high-scores', JSON.stringify(next));
+        } catch (e) {
+          // ignore save error
+        }
         return { highScores: next };
       });
     },

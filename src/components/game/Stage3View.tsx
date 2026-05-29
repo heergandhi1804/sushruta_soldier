@@ -29,11 +29,13 @@ export default function Stage3View() {
 
   const { patients, isGameOver } = stage3;
   const [activeCotIndex, setActiveCotIndex] = useState<number | null>(null);
+  const lastUpdateTime = useRef(0);
 
-  // Check proximity to cots in useFrame
-  useFrame(() => {
+  // Check proximity and run throttled decay/spawn loop
+  useFrame((state) => {
     if (isGameOver) return;
 
+    // 1. Proximity check (runs every frame)
     const px = playerPosition[0];
     const pz = playerPosition[2];
 
@@ -49,6 +51,99 @@ export default function Stage3View() {
     });
 
     setActiveCotIndex(closestIdx);
+
+    // 2. Throttled game tick (runs every 0.25s)
+    const elapsed = state.clock.getElapsedTime();
+    if (lastUpdateTime.current === 0) {
+      lastUpdateTime.current = elapsed;
+      return;
+    }
+
+    if (elapsed - lastUpdateTime.current > 0.25) {
+      const tickDelta = elapsed - lastUpdateTime.current;
+      lastUpdateTime.current = elapsed;
+
+      // Decay stats
+      let nextPatients = patients.map((p) => {
+        const nextP = { ...p };
+        if (!p.cleaned) nextP.infection = Math.min(100, p.infection + p.decaySpeed * tickDelta * 5);
+        if (!p.wrapped) nextP.bleeding = Math.min(100, p.bleeding + p.decaySpeed * tickDelta * 6);
+        if (!p.soothed) nextP.pain = Math.min(100, p.pain + p.decaySpeed * tickDelta * 4);
+        return nextP;
+      });
+
+      // Filter out collapsed patients
+      let deadPatientName = '';
+      const activePatients = nextPatients.filter((p) => {
+        if (p.infection >= 100 || p.bleeding >= 100) {
+          deadPatientName = p.name;
+          return false;
+        }
+        return true;
+      });
+
+      let nextLives = lives;
+      let nextGameOver: boolean = isGameOver;
+
+      if (deadPatientName) {
+        nextLives = Math.max(0, lives - 1);
+        flashSushrutaAlert(`Alas! ${deadPatientName} collapsed.`);
+        if (nextLives <= 0) {
+          nextGameOver = true;
+          flashSushrutaAlert('Ward is overrun! Game Over.');
+        }
+        useGameStore.setState({ lives: nextLives });
+      }
+
+      // Spawning new patients
+      let nextSpawnTimer = stage3.spawnTimer + tickDelta;
+      const spawnInterval = Math.max(4.0, 9.0 - score * 0.4); // speed up spawning as score increases
+
+      if (nextSpawnTimer >= spawnInterval) {
+        nextSpawnTimer = 0;
+        if (activePatients.length < 5) {
+          const occupiedCots = activePatients.map((p) => p.cotIndex);
+          const emptyCots = [0, 1, 2, 3, 4].filter((idx) => !occupiedCots.includes(idx));
+          
+          if (emptyCots.length > 0) {
+            const randomCot = emptyCots[Math.floor(Math.random() * emptyCots.length)];
+            const randomName = namesPool[Math.floor(Math.random() * namesPool.length)];
+            const randomAvatar = avatarsPool[Math.floor(Math.random() * avatarsPool.length)];
+            const randomInjury = (['cut', 'burn', 'fracture'] as const)[Math.floor(Math.random() * 3)];
+
+            const newPatient: Patient = {
+              id: `p_${Date.now()}`,
+              name: randomName,
+              avatar: randomAvatar,
+              cotIndex: randomCot,
+              bleeding: Math.random() * 30 + 15,
+              infection: Math.random() * 20 + 10,
+              pain: Math.random() * 30 + 15,
+              injuryType: randomInjury,
+              cleaned: false,
+              wrapped: false,
+              soothed: false,
+              stitched: false,
+              decaySpeed: 0.6 + Math.random() * 0.8
+            };
+
+            activePatients.push(newPatient);
+            flashSushrutaAlert(`New patient ${randomName} arrived at Cot ${randomCot + 1}!`);
+          }
+        }
+      }
+
+      setStage3({
+        patients: activePatients,
+        isGameOver: nextGameOver,
+        spawnTimer: nextSpawnTimer
+      });
+
+      // Save high score on game over
+      if (nextGameOver && score > highScores.stage3MaxSaved) {
+        updateHighScores({ stage3MaxSaved: score });
+      }
+    }
   });
 
   const handleTreat = (patientId: string, action: 'clean' | 'wrap' | 'soothe' | 'stitch') => {

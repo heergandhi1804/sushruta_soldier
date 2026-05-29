@@ -46,7 +46,6 @@ export default function SandboxView() {
       risk: Math.min(100, Math.max(5, baseRisk + (tipShape === 'Blunt' ? 4 : -2)))
     };
 
-    setSandbox({ forgedTool: toolStats });
     return toolStats;
   }, [jawType, handleLength, weight, tipShape, isTipBent]);
 
