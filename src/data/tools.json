@@ -1,0 +1,34 @@
+[
+  {
+    "id": "crow-beak",
+    "label": "Crow Beak",
+    "precision": 75,
+    "gripStrength": 65,
+    "speed": 70,
+    "risk": 15
+  },
+  {
+    "id": "eagle-pinch",
+    "label": "Eagle Pinch",
+    "precision": 85,
+    "gripStrength": 80,
+    "speed": 60,
+    "risk": 10
+  },
+  {
+    "id": "crocodile-clamp",
+    "label": "Crocodile Clamp",
+    "precision": 65,
+    "gripStrength": 95,
+    "speed": 55,
+    "risk": 20
+  },
+  {
+    "id": "heron-probe",
+    "label": "Heron Probe",
+    "precision": 88,
+    "gripStrength": 50,
+    "speed": 75,
+    "risk": 12
+  }
+]

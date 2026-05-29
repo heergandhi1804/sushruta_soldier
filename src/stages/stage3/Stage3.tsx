@@ -21,7 +21,7 @@ const herbs = [
 
 export default function Stage3() {
   const { realityLayer, updateScroll, updateConsequences, addHistory } = useSimulation();
-  const [queue, setQueue] = useState<PatientProfile[]>(() => patientsData);
+  const [queue, setQueue] = useState<PatientProfile[]>(() => patientsData as PatientProfile[]);
   const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
   const [anesthesiaDose, setAnesthesiaDose] = useState(8);
   const [suture, setSuture] = useState(sutureOptions[0].id);

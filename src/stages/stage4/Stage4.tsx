@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import toolsData from '../../data/tools.json';
 import { useSimulation } from '../../systems/SimulationProvider';
 import { manuscriptFragments } from '../../systems/historical';
+import { ToolOption } from '../../types/simulation';
 
 const fragment = manuscriptFragments.find((item) => item.id === 'stage4-forge');
 
@@ -23,7 +24,7 @@ export default function Stage4() {
   const activeFragment = fragment ? fragment[realityLayer] : '';
 
   const stats = useMemo(() => {
-    const base = toolsData.find((entry) => entry.label === jawType) ?? toolsData[0];
+    const base = (toolsData as ToolOption[]).find((entry: ToolOption) => entry.label === jawType) ?? (toolsData as ToolOption[])[0];
     const lengthModifier = handleLength === 'Short' ? -5 : handleLength === 'Long' ? 5 : 0;
     const weightModifier = weight === 'Light' ? -4 : weight === 'Heavy' ? 4 : 0;
     const tipModifier = tipShape === 'Fine' ? 6 : tipShape === 'Blunt' ? -2 : 2;

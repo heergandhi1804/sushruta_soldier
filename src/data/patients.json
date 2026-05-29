@@ -1,0 +1,52 @@
+[
+  {
+    "id": "patient1",
+    "age": 35,
+    "weight": 72,
+    "condition": "Nasal fracture with displacement",
+    "painLevel": 8,
+    "infectionRisk": 15,
+    "urgency": 9,
+    "status": "waiting"
+  },
+  {
+    "id": "patient2",
+    "age": 52,
+    "weight": 85,
+    "condition": "Chronic ear infection",
+    "painLevel": 6,
+    "infectionRisk": 25,
+    "urgency": 6,
+    "status": "waiting"
+  },
+  {
+    "id": "patient3",
+    "age": 28,
+    "weight": 65,
+    "condition": "Lip laceration requiring repair",
+    "painLevel": 7,
+    "infectionRisk": 20,
+    "urgency": 7,
+    "status": "waiting"
+  },
+  {
+    "id": "patient4",
+    "age": 45,
+    "weight": 78,
+    "condition": "Facial abscess requiring drainage",
+    "painLevel": 9,
+    "infectionRisk": 35,
+    "urgency": 8,
+    "status": "waiting"
+  },
+  {
+    "id": "patient5",
+    "age": 38,
+    "weight": 70,
+    "condition": "Minor cheek wound",
+    "painLevel": 4,
+    "infectionRisk": 10,
+    "urgency": 3,
+    "status": "waiting"
+  }
+]
