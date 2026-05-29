@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
-import { GameMode, RealityLayer, ScrollMetrics, ConsequenceMetrics, SavePayload, TimeOfDay, SandboxElement, ToolOption } from '../types/simulation';
+import { GameMode, RealityLayer, ScrollMetrics, ConsequenceMetrics, SavePayload, TimeOfDay, SandboxElement, ToolOption, HighScores } from '../types/simulation';
 import { initialScrollMetrics, adjustScrollMetrics } from './scroll';
 import { initialConsequences, adjustConsequences } from './consequence';
 import { loadSimulation, saveSimulation } from '../utils/storage';
@@ -31,6 +31,8 @@ interface SimulationState {
   setSandboxElements: (elements: SandboxElement[] | ((prev: SandboxElement[]) => SandboxElement[])) => void;
   forgedTool: ToolOption;
   setForgedTool: (tool: ToolOption) => void;
+  highScores: HighScores;
+  updateHighScores: (changes: Partial<HighScores>) => void;
 }
 
 const SimulationContext = createContext<SimulationState | undefined>(undefined);
@@ -49,7 +51,7 @@ const defaultTool: ToolOption = {
 export function SimulationProvider({ children }: { children: ReactNode }) {
   const [gameMode, setGameMode] = useState<GameMode>('menu');
   const [stage, setStageState] = useState(1);
-  const [unlockedStages, setUnlockedStages] = useState<number[]>([1]);
+  const [unlockedStages, setUnlockedStages] = useState<number[]>([1, 2, 3]);
   const [realityLayer, setRealityLayerState] = useState<RealityLayer>(initialReality);
   const [scrollMetrics, setScrollMetrics] = useState<ScrollMetrics>(initialScrollMetrics);
   const [consequenceMetrics, setConsequenceMetrics] = useState<ConsequenceMetrics>(initialConsequences);
@@ -61,6 +63,31 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   
   const [sandboxElements, setSandboxElements] = useState<SandboxElement[]>([]);
   const [forgedTool, setForgedTool] = useState<ToolOption>(defaultTool);
+
+  const [highScores, setHighScores] = useState<HighScores>(() => {
+    const raw = localStorage.getItem('sushruta-high-scores');
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+        // use default
+      }
+    }
+    return {
+      stage1BestTime: null,
+      stage2BestTime: null,
+      stage3MaxSaved: 0,
+      bestRank: 'Disciple'
+    };
+  });
+
+  const updateHighScores = (changes: Partial<HighScores>) => {
+    setHighScores((prev) => {
+      const next = { ...prev, ...changes };
+      localStorage.setItem('sushruta-high-scores', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const flashSushrutaAlert = (msg: string) => {
     setSushrutaAlert(msg);
@@ -97,7 +124,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       stage,
       scroll: scrollMetrics,
       consequences: consequenceMetrics,
-      history
+      history,
+      highScores
     };
     saveSimulation(payload);
   };
@@ -109,6 +137,9 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       setScrollMetrics(saved.scroll);
       setConsequenceMetrics(saved.consequences);
       setHistory(saved.history);
+      if (saved.highScores) {
+        setHighScores(saved.highScores);
+      }
     }
   };
 
@@ -139,7 +170,9 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       sandboxElements,
       setSandboxElements,
       forgedTool,
-      setForgedTool
+      setForgedTool,
+      highScores,
+      updateHighScores
     }),
     [
       gameMode, 
@@ -153,7 +186,9 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       completedCinematic, 
       sushrutaAlert, 
       sandboxElements, 
-      forgedTool
+      forgedTool,
+      highScores,
+      updateHighScores
     ]
   );
 

@@ -2,382 +2,363 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useSimulation } from '../../systems/SimulationProvider';
 
-interface LeechItem {
-  id: 'medicinal' | 'poisonous';
-  name: string;
-  color: string;
-  glow: string;
-  skin: string;
-  speed: string;
-}
-
-const leechesList: LeechItem[] = [
-  {
-    id: 'medicinal',
-    name: 'Jalauka (Medicinal)',
-    color: 'bg-emerald-850 border-emerald-500',
-    glow: 'shadow-emerald-500/20',
-    skin: 'Smooth olive skin, yellow bands',
-    speed: 'Rhythmic, gentle waves'
-  },
-  {
-    id: 'poisonous',
-    name: 'Savisha (Poisonous)',
-    color: 'bg-red-950 border-red-500',
-    glow: 'shadow-red-500/20',
-    skin: 'Rough grey knobs, black spikes',
-    speed: 'Hyperactive, frantic twists'
-  }
-];
-
 export default function Stage1() {
   const {
-    updateScroll,
-    updateConsequences,
-    addHistory,
-    setUnlockedStages,
+    updateHighScores,
     flashSushrutaAlert,
-    consequenceMetrics
+    highScores
   } = useSimulation();
 
-  const [selectedLeech, setSelectedLeech] = useState<'medicinal' | 'poisonous' | null>(null);
-  const [attached, setAttached] = useState(false);
-  const [timer, setTimer] = useState(0); // in seconds
-  const [swelling, setSwelling] = useState(85); // percentage
-  const [bloodPressure, setBloodPressure] = useState(130);
-  const [breathingRate, setBreathingRate] = useState(2.2); // seconds per breath
-  const [activeStatus, setActiveStatus] = useState('Inspect the leeches and click to select.');
+  // Tool states
+  const [heldTool, setHeldTool] = useState<'medicinal' | 'poisonous' | 'honey' | null>(null);
+  const [attached, setAttached] = useState<'medicinal' | 'poisonous' | null>(null);
+  
+  // Patient vitals
+  const [swelling, setSwelling] = useState(85); // 0 to 100
+  const [bloodPool, setBloodPool] = useState(0); // 0 to 100 (size of blood pool under cot)
+  const [breathingRate, setBreathingRate] = useState(2.2); // seconds per breath cycle
+  const [poisonVeins, setPoisonVeins] = useState(false);
+  const [timer, setTimer] = useState(0);
+  
+  // Game states
   const [isFinished, setIsFinished] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [poisonVeins, setPoisonVeins] = useState(false);
+  const [stars, setStars] = useState(0);
+  const [verdict, setVerdict] = useState('');
 
-  // Real-time ticking system (every 100ms)
+  // Ticking logic
   useEffect(() => {
     if (isFinished) return;
 
     const interval = window.setInterval(() => {
       if (attached) {
-        setTimer((t) => {
-          const nextT = t + 0.1;
-          
-          // Deteriorate if left too long
-          if (nextT >= 6.0) {
-            handleFailure('Leech fed past the impure blood, draining vital life-essence!');
-            return 6.0;
-          }
-          return nextT;
-        });
+        setTimer((t) => t + 0.1);
 
-        // Leech sucks swelling
-        setSwelling((s) => Math.max(10, s - 1.2));
-        
-        // Pressure drops as blood is extracted
-        setBloodPressure((bp) => Math.max(70, bp - 1.1));
-
-        if (selectedLeech === 'poisonous') {
-          // Poison causes instant distress
+        if (attached === 'poisonous') {
+          // Failure cascade for poisonous leech
           setPoisonVeins(true);
-          setBreathingRate(0.6); // gasping
-          updateConsequences({ pain: 3, inflammation: 2, infection: 4 });
+          setBreathingRate(0.5); // Gasping
+          setSwelling((s) => Math.min(100, s + 3)); // Swells due to toxic reaction
+          setBloodPool((bp) => Math.min(100, bp + 4)); // Bleeding bursts
+          
+          if (timer > 1.5) {
+            triggerFailure('Toxified! The Savisha leech injected deadly venom.');
+          }
         } else {
-          // Medicinal relieves pain and breathing stabilizes
-          setBreathingRate((rate) => Math.max(1.0, rate - 0.05));
-          updateConsequences({ pain: -1.5, bloodLoss: 1 });
+          // Medicinal leech drains swelling
+          setSwelling((s) => Math.max(10, s - 2.2));
+          
+          // Breathing relaxes as swelling goes down
+          setBreathingRate((br) => Math.max(1.2, br - 0.05));
+
+          // If swelling is drained, leech starts drinking healthy blood!
+          if (swelling <= 15) {
+            setBloodPool((bp) => Math.min(100, bp + 3.5)); // blood starts pooling on floor
+            setBreathingRate(0.8); // patient groans in pain
+            if (bloodPool >= 70) {
+              triggerFailure('Hemorrhage! The leech drained vital life-blood.');
+            }
+          }
         }
       } else {
-        // Swelling slowly accumulates if untreated
-        setSwelling((s) => Math.min(100, s + 0.15));
+        // Untreated: swelling pulses/increases slightly
+        setSwelling((s) => Math.min(100, s + 0.1));
       }
     }, 100);
 
     return () => window.clearInterval(interval);
-  }, [attached, selectedLeech, isFinished]);
+  }, [attached, swelling, bloodPool, isFinished, timer]);
 
-  const handleAttach = () => {
-    if (!selectedLeech || attached || isFinished) return;
-    setAttached(true);
-    setTimer(0);
-    setActiveStatus('Leech applied. Watch the swelling level and blood pulse speed.');
-    flashSushrutaAlert('Leech attached. Monitor the color change and swelling reduction.');
-  };
+  const handleApplyTool = () => {
+    if (isFinished) return;
 
-  const handleRemove = () => {
-    if (!attached || isFinished) return;
-    setAttached(false);
-    setIsFinished(true);
-
-    const isCorrectLeech = selectedLeech === 'medicinal';
-    const isCorrectTiming = timer >= 4.0 && timer <= 5.2;
-
-    if (selectedLeech === 'poisonous') {
-      handleFailure('Toxic leech injected poison! Patient collapsed with burning fever.');
-      updateConsequences({ pain: 25, infection: 30, trust: -20 });
-    } else if (!isCorrectTiming) {
-      if (timer < 4.0) {
-        setActiveStatus('Removed too early. Swelling remains congested and painful.');
-        flashSushrutaAlert('Too early! Impure blood remains blockaded.');
-        updateConsequences({ pain: 10, trust: -5 });
-      } else {
-        handleFailure('Removed too late! Healthy blood was drained, leaving patient pale.');
-        updateConsequences({ bloodLoss: 25, trust: -12 });
+    if (heldTool === 'medicinal' || heldTool === 'poisonous') {
+      if (attached) {
+        flashSushrutaAlert('A leech is already attached!');
+        return;
       }
-    } else {
-      // Success!
-      setIsSuccess(true);
-      setActiveStatus('Success! Impure blood drained, swelling resolved, pulse stabilized.');
-      flashSushrutaAlert('Masterful timing. The leg is healed. Chapter 2 is unlocked!');
-      updateScroll({ observation: 10, precision: 10 });
-      updateConsequences({ inflammation: -30, pain: -20, trust: 20 });
-      setUnlockedStages([1, 2]); // Progression trigger!
+      setAttached(heldTool);
+      setTimer(0);
+      setHeldTool(null);
+      flashSushrutaAlert('Leech attached. Observe the swelling.');
+    } else if (heldTool === 'honey') {
+      if (!attached) {
+        flashSushrutaAlert('Nothing to release. Select a leech first.');
+        return;
+      }
+      
+      // Remove leech and check verdict
+      const finalAttached = attached;
+      setAttached(null);
+      setHeldTool(null);
+      setIsFinished(true);
+
+      if (finalAttached === 'poisonous') {
+        triggerFailure('Toxified! The poisonous leech did permanent tissue damage.');
+      } else {
+        // Check timing/swelling
+        if (swelling > 30) {
+          // Too early
+          setIsSuccess(false);
+          setStars(0);
+          setVerdict('Removed Too Early! Impure blood remains stagnant.');
+          flashSushrutaAlert('Unfinished. The swelling remains.');
+        } else if (swelling <= 30 && bloodPool < 25) {
+          // Perfect
+          setIsSuccess(true);
+          const earnedStars = bloodPool < 10 ? 3 : 2;
+          setStars(earnedStars);
+          setVerdict(earnedStars === 3 ? 'Gold Ribbon: Flawless Extraction!' : 'Silver Ribbon: Minor Bleeding.');
+          flashSushrutaAlert('Masterfully completed.');
+          
+          // Save high score (fastest time)
+          const recordTime = highScores.stage1BestTime;
+          if (recordTime === null || timer < recordTime) {
+            updateHighScores({ stage1BestTime: timer });
+          }
+        } else {
+          // Too late, excessive blood loss
+          triggerFailure('Hemorrhage! Impure blood was drained, but healthy blood followed.');
+        }
+      }
     }
   };
 
-  const handleFailure = (msg: string) => {
+  const triggerFailure = (msg: string) => {
     setIsFinished(true);
     setIsSuccess(false);
-    setAttached(false);
-    setActiveStatus(msg);
-    flashSushrutaAlert('Therapy failed. Re-evaluate the parameters.');
+    setStars(0);
+    setVerdict(msg);
+    flashSushrutaAlert('Treatment failed.');
   };
 
-  const handleReset = () => {
-    setSelectedLeech(null);
-    setAttached(false);
-    setTimer(0);
+  const resetStage = () => {
+    setHeldTool(null);
+    setAttached(null);
     setSwelling(85);
-    setBloodPressure(130);
+    setBloodPool(0);
     setBreathingRate(2.2);
+    setPoisonVeins(false);
+    setTimer(0);
     setIsFinished(false);
     setIsSuccess(false);
-    setPoisonVeins(false);
-    setActiveStatus('Select a leech and place it to begin.');
+    setStars(0);
+    setVerdict('');
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr] h-full items-stretch">
-      {/* Simulation Screen */}
-      <div className="flex flex-col justify-between rounded-[24px] border border-stone-800 bg-stone-950 p-6 relative overflow-hidden shadow-2xl">
+    <div className="flex flex-col xl:flex-row gap-6 items-stretch h-full">
+      {/* Simulation viewport */}
+      <div className="flex-1 rounded-[24px] border border-stone-800 bg-stone-950 p-6 flex flex-col justify-between min-h-[500px] relative overflow-hidden shadow-2xl">
         
-        {/* Breathing Torso visual indicator */}
-        <div className="flex justify-between items-center bg-stone-900/50 p-3 rounded-2xl border border-stone-800/60 mb-4">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">🫁</span>
-            <div>
-              <span className="text-[10px] text-stone-500 uppercase font-bold">Chest Respiration</span>
-              <div className="flex items-center gap-1 mt-0.5">
-                {/* Visual breathing bar */}
-                <motion.div
-                  animate={{
-                    scaleY: [1, 1.3, 1],
-                    opacity: [0.7, 1, 0.7]
-                  }}
-                  transition={{
-                    repeat: Infinity,
-                    duration: breathingRate,
-                    ease: 'easeInOut'
-                  }}
-                  className="w-4 h-3 bg-herbal rounded origin-bottom"
-                />
-                <span className="text-xs font-bold text-stone-300">
-                  {breathingRate < 1.0 ? 'Rapid Gasps' : 'Stable Breath'}
-                </span>
-              </div>
-            </div>
-          </div>
+        {/* Background blood pool on the floor */}
+        {bloodPool > 0 && (
+          <motion.div
+            className="absolute bottom-[5%] left-[30%] bg-red-900 rounded-full blur-md opacity-75 pointer-events-none"
+            style={{
+              width: `${bloodPool * 3.5}px`,
+              height: `${bloodPool * 1.8}px`,
+              transform: 'translateX(-50%)',
+            }}
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ repeat: Infinity, duration: 2 }}
+          />
+        )}
 
-          <div className="text-right">
-            <span className="text-[10px] text-stone-500 uppercase font-bold">Fluid Pressure</span>
-            <p className="text-xs font-bold text-stone-200 mt-0.5">{Math.round(bloodPressure)} mmHg</p>
-          </div>
+        {/* Floating Tool status */}
+        <div className="absolute top-4 left-4 z-10 flex gap-2">
+          {heldTool && (
+            <div className="rounded-full bg-amber/20 border border-amber/40 px-3 py-1 text-[10px] uppercase font-bold text-amber animate-pulse">
+              Holding: {heldTool === 'honey' ? 'Honey Sponge' : `${heldTool} Leech`}
+            </div>
+          )}
         </div>
 
-        {/* Dynamic SVG Leg model */}
-        <div className="flex-1 min-h-[220px] flex items-center justify-center relative bg-stone-900/20 border border-stone-800/30 rounded-[20px] overflow-hidden my-2">
-          
-          <svg viewBox="0 0 400 180" className="w-full max-w-[420px] overflow-visible">
-            {/* Outline leg structure */}
-            <path
-              d="M 20,90 Q 120,40 220,50 T 380,80 L 380,105 T 220,120 Q 120,130 20,100 Z"
-              fill="#1c1917"
-              stroke="#b36b32"
-              strokeWidth="2.5"
-              className="transition-colors duration-500"
-              style={{
-                fill: poisonVeins ? '#0c1a0f' : isFinished && !isSuccess ? '#2c1e1c' : '#1c1917'
-              }}
-            />
-
-            {/* Vein pathways */}
-            <path
-              d="M 40,92 Q 130,55 210,65 T 350,90"
-              fill="none"
-              stroke={poisonVeins ? '#052e16' : '#991b1b'}
-              strokeWidth="2"
-              className="opacity-80"
-            />
+        {/* Breathing Torso close-up viewport */}
+        <div className="flex-1 flex items-center justify-center relative">
+          <svg viewBox="0 0 500 300" className="w-full max-w-[550px] overflow-visible">
+            {/* Woven Cot */}
+            <rect x="50" y="200" width="400" height="30" rx="4" fill="#3e2723" stroke="#271510" strokeWidth="2" />
+            <line x1="80" y1="230" x2="80" y2="280" stroke="#3e2723" strokeWidth="8" strokeLinecap="round" />
+            <line x1="420" y1="230" x2="420" y2="280" stroke="#3e2723" strokeWidth="8" strokeLinecap="round" />
             
-            {/* Pulsing blood pressure circle */}
-            <motion.circle
-              cx="180"
-              cy="70"
-              r="10"
-              fill={poisonVeins ? 'none' : '#ef4444'}
-              className="opacity-25"
-              animate={{
-                scale: attached ? [1, 1.6, 1] : [1, 1.25, 1]
-              }}
-              transition={{
-                repeat: Infinity,
-                duration: attached ? 0.4 : 1.2,
-                ease: 'easeInOut'
-              }}
+            {/* Patient chest outline (breathes!) */}
+            <motion.g
+              animate={{ scaleY: [1, 1.08, 1], y: [0, -3, 0] }}
+              transition={{ repeat: Infinity, duration: breathingRate, ease: 'easeInOut' }}
+            >
+              {/* Torso */}
+              <path d="M 60,195 Q 160,165 240,190 T 400,205" fill="none" stroke="#855b38" strokeWidth="20" strokeLinecap="round" />
+              {/* Head flinch representation */}
+              <circle cx="80" cy="170" r="18" fill="#855b38" />
+            </motion.g>
+
+            {/* Leg structure (un-affected leg behind) */}
+            <path d="M 230,193 Q 290,175 380,210" fill="none" stroke="#704a2c" strokeWidth="24" strokeLinecap="round" className="opacity-45" />
+
+            {/* Affected Leg (breathing/pulsating/swelling) */}
+            <motion.path
+              d="M 240,190 Q 300,160 380,205"
+              fill="none"
+              stroke={poisonVeins ? '#2c3e2e' : bloodPool > 50 ? '#b5a191' : '#855b38'}
+              strokeWidth="28"
+              strokeLinecap="round"
+              className="transition-colors duration-700"
             />
 
-            {/* Swelling Dome Visual (expands/contracts live) */}
+            {/* Poison toxic veins path */}
+            {poisonVeins && (
+              <path
+                d="M 260,185 Q 300,165 340,180 T 370,200"
+                fill="none"
+                stroke="#15803d"
+                strokeWidth="2.5"
+                strokeDasharray="3 3"
+                className="animate-pulse"
+              />
+            )}
+
+            {/* Swelling mound circle overlay */}
             <circle
-              cx="180"
-              cy="72"
-              r={swelling * 0.45}
-              fill="url(#swelling-gradient)"
-              className="opacity-75 transition-all duration-300"
+              cx="310"
+              cy="176"
+              r={swelling * 0.32}
+              fill="url(#swellGradient)"
+              className="cursor-pointer transition-all duration-300 hover:brightness-110"
+              onClick={handleApplyTool}
             />
 
-            {/* Attached Leech rendering */}
+            {/* Attached Leech visual representation */}
             {attached && (
               <motion.path
-                d="M 180,72 Q 190,50 170,45"
+                d="M 310,176 Q 320,150 300,145"
                 fill="none"
-                stroke="#3f6212"
-                strokeWidth="6"
+                stroke={attached === 'poisonous' ? '#4a5d4b' : '#1e381e'}
+                strokeWidth="7"
                 strokeLinecap="round"
                 animate={{
-                  strokeWidth: [6, 8, 6],
-                  d: ['M 180,72 Q 190,50 170,45', 'M 180,72 Q 185,48 175,47', 'M 180,72 Q 190,50 170,45']
+                  d: ['M 310,176 Q 320,150 300,145', 'M 310,176 Q 315,148 305,147', 'M 310,176 Q 320,150 300,145']
                 }}
                 transition={{ repeat: Infinity, duration: 0.6 }}
               />
             )}
 
-            {/* Gradients */}
+            {/* Red blood squirts for fail cascade */}
+            {attached === 'poisonous' && (
+              <g stroke="#b91c1c" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="310" y1="176" x2="295" y2="140" className="animate-bounce" />
+                <line x1="310" y1="176" x2="330" y2="145" />
+              </g>
+            )}
+
             <defs>
-              <radialGradient id="swelling-gradient">
-                <stop offset="0%" stopColor={poisonVeins ? '#15803d' : '#881337'} />
-                <stop offset="60%" stopColor={poisonVeins ? '#166534' : '#be123c'} stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#1c1917" stopOpacity="0" />
+              <radialGradient id="swellGradient">
+                <stop offset="0%" stopColor={poisonVeins ? '#22c55e' : '#b91c1c'} />
+                <stop offset="60%" stopColor={poisonVeins ? '#15803d' : '#ef4444'} stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#000" stopOpacity="0" />
               </radialGradient>
             </defs>
           </svg>
-
-          {/* Poison Vein overlay notification */}
-          {poisonVeins && (
-            <div className="absolute inset-0 bg-emerald-950/10 pointer-events-none border border-emerald-500/20 rounded-[20px] animate-pulse" />
-          )}
-
-          {/* Swelling meter overlay */}
-          <div className="absolute bottom-4 left-4 flex flex-col gap-0.5">
-            <span className="text-[9px] font-bold text-stone-500 uppercase tracking-widest">Active Swelling</span>
-            <span className="text-sm font-black text-amber">{Math.round(swelling)}% Height</span>
-          </div>
-
-          {/* Live timer overlay */}
-          {attached && (
-            <div className="absolute top-4 right-4 bg-stone-950/80 border border-stone-800 rounded-full px-3 py-1 text-[10px] font-bold text-amber">
-              ⏱️ Sucking: {timer.toFixed(1)}s
-            </div>
-          )}
         </div>
 
-        {/* Leech Clay pots */}
-        <div className="space-y-2 mt-4">
-          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">Clay Leeches Vessels</span>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {leechesList.map((leech) => (
+        {/* Tray of Tools */}
+        <div className="mt-6 border-t border-stone-850 pt-4 flex justify-between items-center flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Surgical Tray:</span>
+            <div className="flex gap-2">
               <button
-                key={leech.id}
                 type="button"
-                onClick={() => setSelectedLeech(leech.id)}
-                disabled={attached || isFinished}
-                className={`group rounded-2xl border p-3.5 text-left transition-all ${
-                  selectedLeech === leech.id
-                    ? 'border-amber bg-stone-900 text-stone-100 shadow-lg'
-                    : 'border-stone-800 bg-stone-950 hover:border-stone-700'
-                } disabled:opacity-50`}
+                onClick={() => setHeldTool('medicinal')}
+                disabled={isFinished || attached !== null}
+                className={`rounded-2xl border px-3 py-2 text-xs font-bold transition-all flex items-center gap-2 ${
+                  heldTool === 'medicinal'
+                    ? 'border-amber bg-stone-900 text-stone-100 shadow-md scale-105'
+                    : 'border-stone-800 bg-stone-950 text-stone-400 hover:border-stone-700'
+                } disabled:opacity-30`}
               >
-                <div className="flex items-center gap-2">
-                  <span className={`w-3.5 h-3.5 rounded-full border-2 ${leech.color} ${leech.glow}`} />
-                  <span className="font-serif font-bold text-sm">{leech.name}</span>
-                </div>
-                <p className="text-[10px] text-stone-500 font-light mt-1.5 leading-4">
-                  {leech.skin} • {leech.speed}
-                </p>
+                🏺 <span className="font-serif">Jalauka (Olive)</span>
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setHeldTool('poisonous')}
+                disabled={isFinished || attached !== null}
+                className={`rounded-2xl border px-3 py-2 text-xs font-bold transition-all flex items-center gap-2 ${
+                  heldTool === 'poisonous'
+                    ? 'border-amber bg-stone-900 text-stone-100 shadow-md scale-105'
+                    : 'border-stone-800 bg-stone-950 text-stone-400 hover:border-stone-700'
+                } disabled:opacity-30`}
+              >
+                🏺 <span className="font-serif">Savisha (Spiky)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setHeldTool('honey')}
+                disabled={isFinished}
+                className={`rounded-2xl border px-3 py-2 text-xs font-bold transition-all flex items-center gap-2 ${
+                  heldTool === 'honey'
+                    ? 'border-amber bg-stone-900 text-stone-100 shadow-md scale-105'
+                    : 'border-stone-800 bg-stone-950 text-stone-400 hover:border-stone-700'
+                } disabled:opacity-30`}
+              >
+                🧽 <span className="font-serif">Honey Sponge</span>
+              </button>
+            </div>
           </div>
-        </div>
-
-        {/* Surgical Controls */}
-        <div className="flex flex-wrap items-center gap-3 border-t border-stone-850 pt-4 mt-4">
-          <button
-            type="button"
-            onClick={handleAttach}
-            disabled={!selectedLeech || attached || isFinished}
-            className="flex-1 min-w-[120px] rounded-full bg-gradient-to-r from-herbal to-emerald-700 py-3 text-xs font-bold uppercase tracking-wider text-white hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Apply Leech
-          </button>
-          
-          <button
-            type="button"
-            onClick={handleRemove}
-            disabled={!attached || isFinished}
-            className="flex-1 min-w-[120px] rounded-full border border-stone-800 bg-stone-900/60 py-3 text-xs font-bold uppercase tracking-wider text-stone-300 hover:bg-stone-850 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Sponge Turmeric (Release)
-          </button>
 
           {isFinished && (
             <button
               type="button"
-              onClick={handleReset}
-              className="rounded-full bg-stone-800 px-5 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-stone-700"
+              onClick={resetStage}
+              className="rounded-full bg-stone-800 hover:bg-stone-700 px-5 py-2 text-xs font-bold uppercase tracking-wider text-white"
             >
-              Reset Anvil
+              Reset Cot
             </button>
           )}
         </div>
       </div>
 
-      {/* Real-time Game Log / Results */}
-      <div className="flex flex-col justify-between rounded-[24px] border border-stone-800 bg-stone-900/40 p-6">
-        <div className="space-y-4">
-          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Surgical Report</span>
-          <h4 className="font-serif text-lg font-bold text-stone-200 border-b border-stone-800 pb-2">Diagnostic Log</h4>
-          <p className="text-xs leading-6 text-stone-300 font-light italic">
-            "{activeStatus}"
-          </p>
+      {/* Star Rank & Verdict HUD */}
+      <div className="w-full xl:w-80 rounded-[24px] border border-stone-800 bg-stone-900/40 p-6 flex flex-col justify-between">
+        <div>
+          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest block">Surgical Report</span>
+          <h4 className="font-serif text-lg font-bold text-stone-200 border-b border-stone-800 pb-2 mt-1">Status</h4>
+          
+          <div className="mt-6 flex flex-col items-center justify-center text-center p-4 rounded-2xl bg-stone-950/40 border border-stone-850/60 min-h-[140px]">
+            {isFinished ? (
+              <>
+                <span className="text-4xl block mb-2">{isSuccess ? '🏆' : '⚠️'}</span>
+                <span className={`text-xs font-bold uppercase tracking-wider block ${isSuccess ? 'text-herbal' : 'text-danger'}`}>
+                  {isSuccess ? 'Treatment Complete' : 'Failure'}
+                </span>
+                <p className="text-[11px] text-stone-400 mt-2 italic font-light px-2 leading-relaxed">
+                  "{verdict}"
+                </p>
+
+                {isSuccess && (
+                  <div className="flex gap-1 mt-4">
+                    {[1, 2, 3].map((star) => (
+                      <span key={star} className={`text-xl ${star <= stars ? 'opacity-100' : 'opacity-20'}`}>
+                        ⭐
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="text-3xl block mb-2">👁️</span>
+                <p className="text-[11px] text-stone-400 italic font-light leading-relaxed">
+                  Apply a medicinal leech to extract impure blood. Remove it with honey before healthy blood is drained.
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
-        {isFinished && (
-          <div className="border-t border-stone-800 pt-4 space-y-4 mt-6">
-            <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest block">Chapter Verdict</span>
-            
-            {isSuccess ? (
-              <div className="rounded-xl border border-herbal/30 bg-herbal/10 p-4 text-center">
-                <span className="text-2xl block mb-1">🎉</span>
-                <span className="text-sm font-bold text-herbal uppercase tracking-wider block">Chapter Mastered</span>
-                <p className="text-[11px] text-stone-300 font-light mt-1.5">
-                  Swelling successfully resolved. The guard returns to duty. Chapter 2 has been unlocked.
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-center">
-                <span className="text-2xl block mb-1">⚠️</span>
-                <span className="text-sm font-bold text-danger uppercase tracking-wider block">Disciple Failed</span>
-                <p className="text-[11px] text-stone-300 font-light mt-1.5">
-                  The treatment resulted in patient distress or excessive blood loss. Reset the anvil to try again.
-                </p>
-              </div>
-            )}
+        {/* Small timing indicator only visible when leech is sucking */}
+        {attached && (
+          <div className="mt-4 p-3 bg-stone-950/60 border border-stone-850 rounded-xl text-center text-[10px] text-stone-500 uppercase font-bold tracking-widest">
+            ⏱️ Flow Duration: {timer.toFixed(1)}s
           </div>
         )}
       </div>

@@ -78,11 +78,19 @@ export interface SushrutaDialogueState {
   expression: 'calm' | 'thoughtful' | 'concerned' | 'approving' | 'storytelling';
 }
 
+export interface HighScores {
+  stage1BestTime: number | null;
+  stage2BestTime: number | null;
+  stage3MaxSaved: number;
+  bestRank: string;
+}
+
 export interface SavePayload {
   stage: number;
   scroll: ScrollMetrics;
   consequences: ConsequenceMetrics;
   history: string[];
+  highScores?: HighScores;
 }
 
 

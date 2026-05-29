@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useSimulation } from '../../systems/SimulationProvider';
 import { SandboxElement } from '../../types/simulation';
@@ -31,6 +31,12 @@ export default function Stage4() {
   const [testLog, setTestLog] = useState('Build your tool, place elements on the leg, and run the test simulator.');
   const [bleedValue, setBleedValue] = useState(0);
 
+  // Physics simulation variables
+  const lastX = useRef(0);
+  const lastY = useRef(0);
+  const lastTime = useRef(0);
+  const [isTipBent, setIsTipBent] = useState(false);
+
   // Stats calculation
   const stats = useMemo(() => {
     let basePrec = 70;
@@ -51,7 +57,7 @@ export default function Stage4() {
     const tipMod = tipShape === 'Fine' ? 8 : tipShape === 'Blunt' ? -4 : 4;
 
     const toolStats = {
-      precision: Math.min(100, Math.max(10, basePrec + lengthMod + tipMod)),
+      precision: Math.max(10, Math.min(100, basePrec + lengthMod + tipMod - (isTipBent ? 25 : 0))),
       gripStrength: Math.min(100, Math.max(10, baseGrip + weightMod)),
       speed: Math.min(100, Math.max(10, baseSpeed + (handleLength === 'Short' ? 8 : -4))),
       risk: Math.min(100, Math.max(5, baseRisk + (tipShape === 'Blunt' ? 4 : -2)))
@@ -64,7 +70,7 @@ export default function Stage4() {
     });
 
     return toolStats;
-  }, [jawType, handleLength, weight, tipShape, setForgedTool]);
+  }, [jawType, handleLength, weight, tipShape, setForgedTool, isTipBent]);
 
   // Click on Leg canvas to place element or perform test surgery
   const handleCanvasClick = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
@@ -87,6 +93,42 @@ export default function Stage4() {
       };
       setSandboxElements((prev) => [...prev, newElem]);
       flashSushrutaAlert(`Placed ${selectedToolType} at coordinates.`);
+    }
+  };
+
+  // Mouse Move on SVG to simulate tool lag and drag slips
+  const handleCanvasMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
+    if (!testMode) return;
+
+    const now = Date.now();
+    const dt = now - lastTime.current;
+    if (dt > 15) {
+      const dx = e.clientX - lastX.current;
+      const dy = e.clientY - lastY.current;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const speed = dist / dt; // pixels per ms
+
+      // Heavy tools slip more easily at lower speeds, e.g. 0.75; light tools are easier to swing (1.5 threshold)
+      const slipThreshold = weight === 'Heavy' ? 0.75 : weight === 'Light' ? 1.5 : 1.1;
+
+      if (speed > slipThreshold) {
+        setBleedValue((b) => Math.min(100, b + 10));
+        setTestLog('SLIP CASCADE! High drag velocity caused the tool to tear tissue. Bleeding increased.');
+        flashSushrutaAlert('Lancet slipped due to quick movement!');
+        
+        // Place a vein anomaly at mouse coords
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+        const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+        setSandboxElements((prev) => [
+          ...prev,
+          { id: `slip_${Date.now()}`, type: 'vein', x, y, size: 8 }
+        ]);
+      }
+
+      lastX.current = e.clientX;
+      lastY.current = e.clientY;
+      lastTime.current = now;
     }
   };
 
@@ -138,7 +180,11 @@ export default function Stage4() {
       }
     } else if (clickedEl.type === 'fracture') {
       // Snap bone back
-      if (stats.gripStrength > 65) {
+      if (tipShape === 'Fine') {
+        setIsTipBent(true);
+        setTestLog('CLANG! Needle tip bent against bone structure! Precision degraded by 25%.');
+        flashSushrutaAlert('Tip bent against bone!');
+      } else if (stats.gripStrength > 65) {
         setSandboxElements((prev) => prev.filter((el, i) => i !== closestIndex));
         setTestLog('Exerted high leverage to align broken bone. Fractured leg stabilized.');
       } else {
@@ -150,6 +196,7 @@ export default function Stage4() {
   const handleClearSandbox = () => {
     setSandboxElements([]);
     setBleedValue(0);
+    setIsTipBent(false);
     setTestLog('Canvas cleared.');
   };
 
@@ -191,6 +238,7 @@ export default function Stage4() {
               viewBox="0 0 400 180"
               className="w-full max-w-[420px] overflow-visible cursor-crosshair"
               onClick={handleCanvasClick}
+              onMouseMove={handleCanvasMouseMove}
             >
               {/* Leg Outline */}
               <path
@@ -444,7 +492,7 @@ export default function Stage4() {
                 fill="#b45309"
                 stroke="#f59e0b"
                 strokeWidth="1"
-                transform="translate(10, -5)"
+                transform={`translate(10, -5) ${isTipBent ? 'skewX(14) rotate(8)' : ''}`}
               />
               {/* Mirrored jaw */}
               <path
@@ -452,9 +500,15 @@ export default function Stage4() {
                 fill="#b45309"
                 stroke="#f59e0b"
                 strokeWidth="1"
-                transform="scale(-1, 1) translate(-90, -5)"
+                transform={`scale(-1, 1) translate(-90, -5) ${isTipBent ? 'skewX(-14) rotate(-8)' : ''}`}
               />
             </svg>
+
+            {isTipBent && (
+              <span className="absolute top-2 right-3 text-[9px] text-red-500 font-bold uppercase tracking-widest animate-pulse">
+                ⚠️ BENT TIP (Needs Anvil Repair)
+              </span>
+            )}
 
             <span className="absolute bottom-2 right-3 text-[9px] text-stone-600 font-bold uppercase tracking-widest">
               COPPER DESIGN

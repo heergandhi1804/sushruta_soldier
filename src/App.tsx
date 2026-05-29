@@ -8,9 +8,9 @@ import Stage4 from './stages/stage4/Stage4';
 import { useReducedMotion } from './hooks/useReducedMotion';
 
 const stageList = [
-  { id: 1, label: 'Leech Therapy', location: 'Courtyard' },
-  { id: 2, label: 'Marma Grid', location: 'Anatomy Hall' },
-  { id: 3, label: 'Triage Ward', location: 'Recovery Hall' }
+  { id: 1, label: 'Pressure Test', location: 'Leech Therapy' },
+  { id: 2, label: 'Marma Precision', location: 'Skill Challenge' },
+  { id: 3, label: 'Reconstruction Academy', location: 'Survival Mode' }
 ];
 
 function GameApp() {
@@ -24,8 +24,7 @@ function GameApp() {
     sushrutaAlert,
     completedCinematic,
     setCompletedCinematic,
-    consequenceMetrics,
-    scrollMetrics
+    highScores
   } = useSimulation();
 
   const reducedMotion = useReducedMotion();
@@ -136,23 +135,34 @@ function GameApp() {
                   onClick={() => setGameMode('play')}
                   className="w-full rounded-[24px] bg-gradient-to-r from-amber to-copper py-4 text-sm font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest"
                 >
-                  Enter Gurukul (Play Mode)
+                  PLAY
                 </button>
                 <button
                   type="button"
                   onClick={() => setGameMode('sandbox')}
                   className="w-full rounded-[24px] border border-amber/20 bg-stone-900/60 py-4 text-sm font-bold text-amber hover:bg-stone-900/90 active:scale-95 transition-all uppercase tracking-widest"
                 >
-                  Loha-Sala (Tool Sandbox)
+                  SANDBOX
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowSettings(true)}
                   className="w-full rounded-[24px] border border-stone-800 bg-stone-900/30 py-3 text-xs font-bold text-stone-400 hover:text-stone-200 active:scale-95 transition-all uppercase tracking-widest"
                 >
-                  Academy Settings
+                  SETTINGS
                 </button>
               </div>
+
+              {/* High Score panel in Main Menu */}
+              {(highScores.stage3MaxSaved > 0 || highScores.stage1BestTime !== null) && (
+                <div className="mt-4 p-4 rounded-2xl border border-stone-800/80 bg-stone-950/40 text-left text-xs space-y-1.5 text-stone-400 max-w-xs mx-auto">
+                  <p className="text-[10px] font-bold text-amber uppercase tracking-wider text-center border-b border-stone-850 pb-1 mb-2">Record Hall</p>
+                  {highScores.stage1BestTime !== null && <p>⏱️ Pressure Test Best: <span className="text-stone-200 font-bold">{highScores.stage1BestTime.toFixed(1)}s</span></p>}
+                  {highScores.stage2BestTime !== null && <p>⏱️ Marma Best: <span className="text-stone-200 font-bold">{highScores.stage2BestTime.toFixed(1)}s</span></p>}
+                  {highScores.stage3MaxSaved > 0 && <p>🌾 Survival Max Saved: <span className="text-stone-200 font-bold">{highScores.stage3MaxSaved} patients</span></p>}
+                  <p>🎖️ Surgeon Rank: <span className="text-amber font-bold">{highScores.bestRank}</span></p>
+                </div>
+              )}
 
               <p className="text-[10px] text-stone-500 font-light">
                 Developed in compliance with the Sushruta Samhita.
@@ -165,39 +175,29 @@ function GameApp() {
           /* Stage Select Screen */
           <div className="flex-1 flex flex-col justify-center max-w-xl mx-auto py-10 space-y-6">
             <div className="text-center">
-              <span className="text-xs font-bold text-amber uppercase tracking-wider">Play Mode</span>
-              <h2 className="font-serif text-2xl font-bold text-stone-100 mt-1">Study Progression</h2>
+              <span className="text-xs font-bold text-amber uppercase tracking-wider">Free Play Modes</span>
+              <h2 className="font-serif text-2xl font-bold text-stone-100 mt-1">Select Surgical Challenge</h2>
             </div>
 
             <div className="space-y-3">
               {stageList.map((stg) => {
-                const isUnlocked = unlockedStages.includes(stg.id);
                 return (
                   <button
                     key={stg.id}
                     type="button"
-                    disabled={!isUnlocked}
                     onClick={() => {
                       setStage(stg.id);
                       setGameMode('play-active');
                     }}
-                    className={`w-full rounded-[24px] border p-5 text-left transition-all relative overflow-hidden flex items-center justify-between ${
-                      isUnlocked
-                        ? 'border-amber/25 bg-stone-900/80 hover:border-amber/60 hover:bg-stone-900'
-                        : 'border-stone-800 bg-stone-900/20 opacity-55 cursor-not-allowed'
-                    }`}
+                    className="w-full rounded-[24px] border border-amber/25 bg-stone-900/80 hover:border-amber/60 hover:bg-stone-900 p-5 text-left transition-all relative overflow-hidden flex items-center justify-between"
                   >
                     <div>
-                      <span className="text-[10px] font-bold text-amber/60 uppercase">Lesson {stg.id}</span>
+                      <span className="text-[10px] font-bold text-amber/60 uppercase">Mode {stg.id}</span>
                       <h4 className="font-serif text-lg font-bold text-stone-200 mt-1">{stg.label}</h4>
                       <p className="text-[10px] text-stone-500 uppercase font-semibold mt-0.5">{stg.location}</p>
                     </div>
                     <div>
-                      {isUnlocked ? (
-                        <span className="text-herbal text-xs font-bold uppercase">UNLOCKED</span>
-                      ) : (
-                        <span className="text-stone-600 text-xs font-bold uppercase">LOCKED</span>
-                      )}
+                      <span className="text-amber text-xs font-bold uppercase tracking-wider">ENTER</span>
                     </div>
                   </button>
                 );
@@ -218,7 +218,7 @@ function GameApp() {
           /* Active Gameplay screen */
           <div className="flex-1 flex flex-col gap-4">
             {/* Top Minimal HUD (Scores) */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-800 pb-3">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -228,29 +228,12 @@ function GameApp() {
                   Leave Stage
                 </button>
                 <span className="text-xs font-bold text-amber uppercase">
-                  Stage {stage}: {stageList.find((item) => item.id === stage)?.label}
+                  {stageList.find((item) => item.id === stage)?.label}
                 </span>
               </div>
-
-              {/* Dynamic Health Stats HUD */}
-              <div className="flex items-center gap-4 text-xs font-semibold">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-stone-500">Pain:</span>
-                  <span className={consequenceMetrics.pain > 60 ? 'text-danger' : 'text-stone-300'}>
-                    {consequenceMetrics.pain}%
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-stone-500">Bleeding:</span>
-                  <span className={consequenceMetrics.bloodLoss > 60 ? 'text-danger' : 'text-stone-300'}>
-                    {consequenceMetrics.bloodLoss}%
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-stone-500">Reputation:</span>
-                  <span className="text-herbal">{consequenceMetrics.trust}%</span>
-                </div>
-              </div>
+              <span className="text-[9px] font-bold text-stone-500 uppercase tracking-widest">
+                Direct Bodily Assessment Active
+              </span>
             </div>
 
             {/* Active stage component */}
